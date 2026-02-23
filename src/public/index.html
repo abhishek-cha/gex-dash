@@ -1068,11 +1068,20 @@ class GEXChart {
             tooltip.style.left = (mx + 12) + 'px';
             tooltip.style.top = (my - 10) + 'px';
             const d = c.date;
-            tooltip.innerHTML =
+            let html =
               `<div>${d.toLocaleDateString()}</div>` +
               `<div>O: ${c.open.toFixed(2)}&nbsp; H: ${c.high.toFixed(2)}</div>` +
               `<div>L: ${c.low.toFixed(2)}&nbsp; C: ${c.close.toFixed(2)}</div>` +
               `<div>Vol: ${(c.volume / 1e6).toFixed(1)}M</div>`;
+            const nearest = this._nearestGexLevel(price);
+            if (nearest) {
+              html +=
+                `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px">Strike: ${nearest.strike}</div>` +
+                `<div style="color:#4caf50">Call GEX: ${this._fmtGex(nearest.callGex)}</div>` +
+                `<div style="color:#f44336">Put GEX: ${this._fmtGex(nearest.putGex)}</div>` +
+                `<div style="color:#00bcd4">Net GEX: ${this._fmtGex(nearest.netGex)}</div>`;
+            }
+            tooltip.innerHTML = html;
           }
         } else if (mx >= s.gex.left && mx <= s.netGex.right) {
           const nearest = this._nearestGexLevel(price);
