@@ -1,8 +1,8 @@
-# GEX Viewer - Agent Guide
+# GEX Dash - Agent Guide
 
 ## Project Overview
 
-GEX Viewer is a single-page web app that visualizes Gamma Exposure (GEX) for equities and index options using the Schwab API. It has an Express/TypeScript backend and a vanilla JS + Three.js frontend.
+GEX Dash is a single-page web app that visualizes Gamma Exposure (GEX) for equities and index options using the Schwab API. It has an Express/TypeScript backend and a vanilla JS + Three.js frontend.
 
 ## File Structure
 

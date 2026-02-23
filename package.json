@@ -1,5 +1,5 @@
 {
-  "name": "gex-viewer",
+  "name": "gex-dash",
   "version": "1.0.0",
   "description": "Stock chart with Gamma Exposure (GEX) levels from Schwab API",
   "type": "module",

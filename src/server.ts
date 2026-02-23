@@ -369,6 +369,6 @@ app.get("/api/gex/:symbol", async (req, res) => {
 
 const sslOpts = ensureCerts();
 https.createServer(sslOpts, app).listen(PORT, () => {
-  console.log(`GEX Viewer running at https://127.0.0.1:${PORT}`);
+  console.log(`GEX Dash running at https://127.0.0.1:${PORT}`);
   console.log(`Authenticate at https://127.0.0.1:${PORT}/auth/login`);
 });

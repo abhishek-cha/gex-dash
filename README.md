@@ -1,4 +1,4 @@
-# GEX Viewer
+# GEX Dash
 
 Real-time Gamma Exposure (GEX) visualization for equities and index options, powered by the Schwab API. Renders candlestick price charts alongside call/put and net GEX bar charts using Three.js.
 
