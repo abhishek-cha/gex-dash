@@ -224,6 +224,8 @@ async function fetchPriceHistoryRaw(
     period,
     frequencyType,
     frequency,
+    endDate: Date.now().toString(),
+    needExtendedHoursData: "true",
   });
   const resp = await fetch(`${SCHWAB_API_BASE}/pricehistory?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
