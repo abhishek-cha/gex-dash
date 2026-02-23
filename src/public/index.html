@@ -625,7 +625,9 @@ class GEXChart {
     const candleW = (s.candle.width / visibleCount) * (1 - LAYOUT.candleGap);
     const wickW = Math.max(1, candleW * 0.1);
 
-    for (let i = this.viewStartIdx; i < this.viewEndIdx; i++) {
+    const drawStart = Math.max(0, Math.floor(this.viewStartIdx));
+    const drawEnd = Math.min(this.priceData.length, Math.ceil(this.viewEndIdx));
+    for (let i = drawStart; i < drawEnd; i++) {
       const c = this.priceData[i];
       if (!c) continue;
       const x = this._idxToX(i + 0.5) - candleW / 2;
@@ -797,7 +799,9 @@ class GEXChart {
     // Date labels
     const visCount = this.viewEndIdx - this.viewStartIdx;
     const labelEvery = Math.max(1, Math.floor(visCount / 10));
-    for (let i = this.viewStartIdx; i < this.viewEndIdx; i += labelEvery) {
+    const labelStart = Math.max(0, Math.floor(this.viewStartIdx));
+    const labelEnd = Math.min(this.priceData.length, Math.ceil(this.viewEndIdx));
+    for (let i = labelStart; i < labelEnd; i += labelEvery) {
       const c = this.priceData[i];
       if (!c) continue;
       const x = this._idxToX(i + 0.5);
@@ -929,20 +933,129 @@ class GEXChart {
     const chV = document.getElementById('crosshair-v');
     const tooltip = document.getElementById('tooltip');
 
-    // Crosshair + tooltip on hover only
+    this._axisDrag = { active: false, startY: 0, startPriceMin: 0, startPriceMax: 0, anchorFrac: 0 };
+    this._chartDrag = { active: false, startX: 0, startViewStart: 0, startViewEnd: 0 };
+    this._xAxisDrag = { active: false, startX: 0, startViewStart: 0, startViewEnd: 0, anchorFrac: 0 };
+    this._manualYScale = false;
+
+    el.addEventListener('mousedown', (e) => {
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const s = this._sectionBounds();
+      const inXAxis = my > (this.height - LAYOUT.marginBottom) && mx >= s.candle.left && mx <= s.candle.right;
+
+      if (inXAxis) {
+        e.preventDefault();
+        this._xAxisDrag.active = true;
+        this._xAxisDrag.startX = e.clientX;
+        this._xAxisDrag.startViewStart = this.viewStartIdx;
+        this._xAxisDrag.startViewEnd = this.viewEndIdx;
+        this._xAxisDrag.anchorFrac = (mx - s.candle.left) / s.candle.width;
+        el.style.cursor = 'ew-resize';
+      } else if (mx >= s.axis.left && mx <= s.axis.right) {
+        e.preventDefault();
+        this._axisDrag.active = true;
+        this._axisDrag.startY = e.clientY;
+        this._axisDrag.startPriceMin = this.viewPriceMin;
+        this._axisDrag.startPriceMax = this.viewPriceMax;
+        this._axisDrag.anchorFrac = 1 - (my / this.height);
+        this._manualYScale = true;
+        el.style.cursor = 'ns-resize';
+      } else if (mx >= s.candle.left && mx <= s.candle.right) {
+        e.preventDefault();
+        this._chartDrag.active = true;
+        this._chartDrag.startX = e.clientX;
+        this._chartDrag.startViewStart = this.viewStartIdx;
+        this._chartDrag.startViewEnd = this.viewEndIdx;
+        el.style.cursor = 'grabbing';
+        tooltip.style.display = 'none';
+      }
+    });
+
     window.addEventListener('mousemove', (e) => {
+      if (this._axisDrag.active) {
+        const dy = e.clientY - this._axisDrag.startY;
+        const s = this._sectionBounds();
+        const origRange = this._axisDrag.startPriceMax - this._axisDrag.startPriceMin;
+        const zoomFactor = Math.pow(2, dy / (s.chartH * 0.5));
+        let newRange = Math.max(1, origRange * zoomFactor);
+
+        const anchorPrice = this._axisDrag.startPriceMin + this._axisDrag.anchorFrac * origRange;
+        this.viewPriceMin = anchorPrice - this._axisDrag.anchorFrac * newRange;
+        this.viewPriceMax = anchorPrice + (1 - this._axisDrag.anchorFrac) * newRange;
+
+        this.rebuild();
+        return;
+      }
+
+      if (this._chartDrag.active) {
+        const s = this._sectionBounds();
+        const dx = e.clientX - this._chartDrag.startX;
+        const visCount = this._chartDrag.startViewEnd - this._chartDrag.startViewStart;
+
+        const idxShift = -(dx / s.candle.width) * visCount;
+        let newStart = this._chartDrag.startViewStart + idxShift;
+        let newEnd = this._chartDrag.startViewEnd + idxShift;
+
+        if (newStart < 0) { newEnd -= newStart; newStart = 0; }
+        if (newEnd > this.priceData.length) { newStart -= (newEnd - this.priceData.length); newEnd = this.priceData.length; }
+        newStart = Math.max(0, newStart);
+
+        this.viewStartIdx = newStart;
+        this.viewEndIdx = newEnd;
+        this._autoFitY();
+
+        this.rebuild();
+        return;
+      }
+
+      if (this._xAxisDrag.active) {
+        const s = this._sectionBounds();
+        const dx = e.clientX - this._xAxisDrag.startX;
+        const origCount = this._xAxisDrag.startViewEnd - this._xAxisDrag.startViewStart;
+        const anchorIdx = this._xAxisDrag.startViewStart + this._xAxisDrag.anchorFrac * origCount;
+        const zoomFactor = Math.pow(2, dx / (s.candle.width * 0.5));
+        let newCount = origCount * zoomFactor;
+        newCount = Math.max(5, Math.min(this.priceData.length, newCount));
+
+        let newStart = anchorIdx - this._xAxisDrag.anchorFrac * newCount;
+        let newEnd = anchorIdx + (1 - this._xAxisDrag.anchorFrac) * newCount;
+        if (newStart < 0) { newEnd -= newStart; newStart = 0; }
+        if (newEnd > this.priceData.length) { newStart -= (newEnd - this.priceData.length); newEnd = this.priceData.length; }
+        newStart = Math.max(0, newStart);
+
+        this.viewStartIdx = newStart;
+        this.viewEndIdx = newEnd;
+        this._autoFitY();
+
+        this.rebuild();
+        return;
+      }
+
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
 
       if (mx >= 0 && mx <= this.width && my >= 0 && my <= this.height) {
+        const s = this._sectionBounds();
+        const inXAxis = my > (this.height - LAYOUT.marginBottom) && mx >= s.candle.left && mx <= s.candle.right;
+        if (inXAxis) {
+          el.style.cursor = 'ew-resize';
+        } else if (mx >= s.axis.left && mx <= s.axis.right) {
+          el.style.cursor = 'ns-resize';
+        } else if (mx >= s.candle.left && mx <= s.candle.right) {
+          el.style.cursor = 'grab';
+        } else {
+          el.style.cursor = '';
+        }
+
         chH.style.display = 'block';
         chV.style.display = 'block';
         chH.style.top = my + 'px';
         chV.style.left = mx + 'px';
 
         const price = this._yToPrice(this.height - my);
-        const s = this._sectionBounds();
 
         if (mx >= s.candle.left && mx <= s.candle.right) {
           const visCount = this.viewEndIdx - this.viewStartIdx;
@@ -980,13 +1093,48 @@ class GEXChart {
         chH.style.display = 'none';
         chV.style.display = 'none';
         tooltip.style.display = 'none';
+        if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) el.style.cursor = '';
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (this._axisDrag.active) {
+        this._axisDrag.active = false;
+        el.style.cursor = '';
+      }
+      if (this._chartDrag.active) {
+        this._chartDrag.active = false;
+        el.style.cursor = '';
+      }
+      if (this._xAxisDrag.active) {
+        this._xAxisDrag.active = false;
+        el.style.cursor = '';
+      }
+    });
+
+    el.addEventListener('dblclick', (e) => {
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const s = this._sectionBounds();
+      if (mx >= s.axis.left && mx <= s.axis.right) {
+        this._manualYScale = false;
+        this._autoFitY();
+        this.rebuild();
+      } else if (mx >= s.candle.left && mx <= s.candle.right) {
+        this._manualYScale = false;
+        this.viewStartIdx = 0;
+        this.viewEndIdx = this.priceData.length;
+        this._autoFitY();
+        this.rebuild();
       }
     });
 
     el.addEventListener('mouseleave', () => {
-      chH.style.display = 'none';
-      chV.style.display = 'none';
-      tooltip.style.display = 'none';
+      if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) {
+        chH.style.display = 'none';
+        chV.style.display = 'none';
+        tooltip.style.display = 'none';
+      }
     });
   }
 

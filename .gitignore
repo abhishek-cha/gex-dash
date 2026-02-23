@@ -4,4 +4,5 @@ dist/
 .tokens.json
 *.js.map
 .DS_Store
+.idea/
 certs/

@@ -50,6 +50,12 @@ There are only **3 source files**. The frontend is a single HTML file with embed
 - Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, net GEX bars.
 - Key methods: `loadPriceData()`, `loadGEXData()`, `clearGEX()`, `rebuild()`.
 - Crosshair + tooltip on hover.
+- Chart interactions managed in `_setupInteraction()`:
+  - `_chartDrag`: click+drag on candle area to pan horizontally (Y auto-fits).
+  - `_axisDrag`: click+drag on price axis to zoom Y scale, anchored to click point.
+  - `_xAxisDrag`: click+drag on date labels area to zoom X scale, anchored to click point.
+  - Double-click on candle area or price axis to reset to auto-fit.
+  - `_manualYScale` flag prevents auto-fit from overriding user's Y zoom.
 
 **App state variables:**
 - `currentSymbol`: currently loaded ticker.

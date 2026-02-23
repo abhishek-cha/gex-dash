@@ -78,6 +78,18 @@ The UI is a single `index.html` with an embedded Three.js orthographic scene div
 | Call/Put GEX | ~22% | Horizontal bars: calls right, puts left |
 | Net GEX | ~13% | Horizontal bars showing net exposure |
 
+## Chart Interactions
+
+| Area | Action | Behavior |
+|------|--------|----------|
+| Candle chart | Click + drag | Pan horizontally through time (Y auto-fits) |
+| Candle chart | Double-click | Reset to full data range |
+| Price axis | Click + drag up/down | Zoom price scale around click point |
+| Price axis | Double-click | Reset to auto-fit Y |
+| X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
+
+All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.
+
 ## Prerequisites
 
 - **Node.js** >= 18
