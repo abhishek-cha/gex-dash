@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.tokens.json
+*.js.map
+.DS_Store
+certs/

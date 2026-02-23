@@ -1,0 +1,24 @@
+{
+  "name": "gex-viewer",
+  "version": "1.0.0",
+  "description": "Stock chart with Gamma Exposure (GEX) levels from Schwab API",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && cp -r src/public dist/public",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "@sudowealth/schwab-api": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "three": "^0.172.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.4",
+    "@types/three": "^0.172.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3"
+  }
+}
