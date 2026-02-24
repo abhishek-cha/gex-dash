@@ -5,8 +5,7 @@ import { fileURLToPath } from "url";
 import { ensureCerts } from "./certs.js";
 import { initSchwabAuth } from "./schwab.js";
 import { registerAuthRoutes } from "./routes/auth.js";
-import { registerPriceRoutes } from "./routes/price.js";
-import { registerGexRoutes } from "./routes/gex.js";
+import { registerStreamRoutes } from "./routes/stream.js";
 import "dotenv/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,8 +19,7 @@ const app = express();
 app.use(express.static(path.join(__dirname, "public")));
 
 registerAuthRoutes(app, () => schwabAuth);
-registerPriceRoutes(app, () => schwabAuth);
-registerGexRoutes(app, () => schwabAuth);
+registerStreamRoutes(app, () => schwabAuth);
 
 const sslOpts = ensureCerts(projectRoot);
 https.createServer(sslOpts, app).listen(PORT, () => {

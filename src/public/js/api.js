@@ -35,85 +35,62 @@ export function applyGexHeader(gexData) {
   changeEl.className = 'change ' + (change >= 0 ? 'up' : 'down');
 }
 
-export async function loadPrice(symbol, chart) {
-  const loading = document.getElementById('loading');
-  const params = getPriceParams();
-  const qs = new URLSearchParams(params).toString();
-
-  loading.style.display = 'block';
-  loading.textContent = `Loading ${symbol} price...`;
-
-  try {
-    const res = await fetch(`/api/price/${encodeURIComponent(symbol)}?${qs}`);
-    if (res.status === 401) { window.location.href = '/auth/login'; return; }
-    if (!res.ok) throw new Error('Price API error');
-    const priceData = await res.json();
-    loading.style.display = 'none';
-    chart.loadPriceData(priceData);
-  } catch (err) {
-    loading.textContent = 'Failed to load price data.';
-    console.error('Price load error:', err);
-  }
-}
-
 /**
+ * Opens an SSE stream to /api/stream/:symbol.
+ *
  * @param {string} symbol
- * @param {object} chart - GEXChart instance
- * @param {object} state - { allExpirations, selectedExpirations, updateExpirationsFromData }
- * @param {{ useFilter?: boolean }} options
+ * @param {{
+ *   types: string[],
+ *   chart: object,
+ *   state: object,
+ *   expirations?: Set<string>
+ * }} opts
+ * @returns {EventSource}
  */
-export async function loadGEX(symbol, chart, state, { useFilter = false } = {}) {
-  try {
-    let url = `/api/gex/${encodeURIComponent(symbol)}`;
-    if (useFilter && state.selectedExpirations.size > 0 && state.selectedExpirations.size < state.allExpirations.length) {
-      url += `?expirations=${[...state.selectedExpirations].join(',')}`;
-    }
-    const res = await fetch(url);
-    if (res.status === 401) return;
-    if (!res.ok) throw new Error('GEX API error');
-
-    if (useFilter) {
-      const gexData = await res.json();
-      applyGexHeader(gexData);
-      if (gexData.expirationDates) {
-        state.allExpirations = gexData.expirationDates;
-        state.updateFilterButton();
-      }
-      chart.loadGEXData(gexData);
-      return;
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let firstChunkApplied = false;
-
-    while (true) {
-      const { value, done: streamDone } = await reader.read();
-      if (streamDone) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      let newlineIdx;
-      while ((newlineIdx = buffer.indexOf('\n')) !== -1) {
-        const line = buffer.slice(0, newlineIdx).trim();
-        buffer = buffer.slice(newlineIdx + 1);
-        if (!line) continue;
-
-        const chunk = JSON.parse(line);
-        if (chunk.done) break;
-
-        if (!firstChunkApplied && chunk.gexLevels) {
-          applyGexHeader(chunk);
-          chart.loadGEXData(chunk);
-          firstChunkApplied = true;
-        }
-
-        if (chunk.expirationDates) {
-          state.updateExpirationsFromData(chunk.expirationDates);
-        }
-      }
-    }
-  } catch (err) {
-    console.error('GEX load error:', err);
+export function openStream(symbol, { types, chart, state, expirations }) {
+  const qs = new URLSearchParams({ types: types.join(','), ...getPriceParams() });
+  if (expirations && expirations.size > 0) {
+    qs.set('expirations', [...expirations].join(','));
   }
+
+  const loading = document.getElementById('loading');
+  loading.style.display = 'block';
+  loading.textContent = `Loading ${symbol}...`;
+
+  const es = new EventSource(`/api/stream/${encodeURIComponent(symbol)}?${qs}`);
+
+  es.addEventListener('price', (e) => {
+    const priceData = JSON.parse(e.data);
+    chart.loadPriceData(priceData);
+  });
+
+  es.addEventListener('gex', (e) => {
+    const gexData = JSON.parse(e.data);
+    applyGexHeader(gexData);
+    chart.loadGEXData(gexData);
+    if (gexData.selectedExpirations) {
+      state.selectedExpirations = new Set(gexData.selectedExpirations);
+      state.updateFilterButton();
+    }
+  });
+
+  es.addEventListener('expirations', (e) => {
+    const data = JSON.parse(e.data);
+    if (data.expirationDates) {
+      state.allExpirations = data.expirationDates;
+      state.updateFilterButton();
+    }
+  });
+
+  es.addEventListener('done', () => {
+    loading.style.display = 'none';
+    es.close();
+  });
+
+  es.addEventListener('error', () => {
+    loading.textContent = 'Stream error.';
+    es.close();
+  });
+
+  return es;
 }

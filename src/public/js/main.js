@@ -1,5 +1,5 @@
 import { GEXChart } from './chart/GEXChart.js';
-import { checkAuth, loadPrice, loadGEX } from './api.js';
+import { checkAuth, openStream } from './api.js';
 import { openExpDialog, closeExpDialog, applyExpFilter } from './expDialog.js';
 
 // --- App state ---
@@ -8,6 +8,7 @@ const state = {
   currentSymbol: 'AAPL',
   allExpirations: [],
   selectedExpirations: new Set(),
+  activeStream: null,
 
   updateFilterButton() {
     const btn = document.getElementById('exp-filter-btn');
@@ -22,14 +23,11 @@ const state = {
     }
   },
 
-  updateExpirationsFromData(dates) {
-    this.allExpirations = dates;
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + 60);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const within60 = this.allExpirations.filter(d => d <= cutoffStr);
-    this.selectedExpirations = new Set(within60.length > 0 ? within60 : this.allExpirations);
-    this.updateFilterButton();
+  closeStream() {
+    if (this.activeStream) {
+      this.activeStream.close();
+      this.activeStream = null;
+    }
   },
 };
 
@@ -46,8 +44,9 @@ function ensureChart() {
 
 // --- Load orchestration ---
 
-async function loadSymbol(symbol) {
+function loadSymbol(symbol) {
   state.currentSymbol = symbol;
+  state.closeStream();
   const c = ensureChart();
 
   state.allExpirations = [];
@@ -60,8 +59,32 @@ async function loadSymbol(symbol) {
   document.getElementById('hdr-change').className = 'change';
   c.clearGEX();
 
-  loadPrice(symbol, c);
-  loadGEX(symbol, c, state);
+  state.activeStream = openStream(symbol, {
+    types: ['price', 'gex'],
+    chart: c,
+    state,
+  });
+}
+
+function reloadPrice() {
+  state.closeStream();
+  const c = ensureChart();
+  state.activeStream = openStream(state.currentSymbol, {
+    types: ['price'],
+    chart: c,
+    state,
+  });
+}
+
+function reloadGEXFiltered() {
+  state.closeStream();
+  const c = ensureChart();
+  state.activeStream = openStream(state.currentSymbol, {
+    types: ['gex'],
+    chart: c,
+    state,
+    expirations: state.selectedExpirations,
+  });
 }
 
 // --- Init ---
@@ -92,17 +115,17 @@ async function init() {
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
 
   freqSel.addEventListener('change', () => {
-    if (state.currentSymbol) loadPrice(state.currentSymbol, ensureChart());
+    if (state.currentSymbol) reloadPrice();
   });
   rangeSel.addEventListener('change', () => {
-    if (state.currentSymbol) loadPrice(state.currentSymbol, ensureChart());
+    if (state.currentSymbol) reloadPrice();
   });
 
   document.getElementById('exp-filter-btn').addEventListener('click', () => openExpDialog(state));
   document.getElementById('exp-dialog-close').addEventListener('click', closeExpDialog);
   document.getElementById('exp-dialog-apply').addEventListener('click', () => {
     applyExpFilter(state, () => {
-      if (state.currentSymbol) loadGEX(state.currentSymbol, ensureChart(), state, { useFilter: true });
+      if (state.currentSymbol) reloadGEXFiltered();
     });
   });
   document.getElementById('exp-select-all').addEventListener('click', () => {

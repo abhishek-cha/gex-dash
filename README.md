@@ -12,14 +12,13 @@ src/
 ├── gex.ts                 # GEX calculation engine
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
-│   ├── price.ts           # GET /api/price/:symbol
-│   └── gex.ts             # GET /api/gex/:symbol (streaming + filtered)
+│   └── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
 └── public/
     ├── index.html         # HTML shell
     ├── css/styles.css     # All styles
     └── js/
         ├── main.js        # Entry point, app state, event wiring
-        ├── api.js         # API calls, NDJSON stream reader
+        ├── api.js         # API calls, SSE stream via EventSource
         ├── expDialog.js   # Expiration filter dialog
         └── chart/
             ├── constants.js   # Colors, layout, frequency/range maps
@@ -43,24 +42,19 @@ sequenceDiagram
     Server->>Schwab: Exchange code for tokens
     Server-->>Browser: Redirect to /
 
-    par Price + GEX load
-        Browser->>Server: GET /api/price/:symbol
-        Server->>Schwab: Price history API
-        Schwab-->>Server: OHLCV candles
-        Server-->>Browser: JSON response
-
-        Browser->>Server: GET /api/gex/:symbol
-        Note over Server: Fires 8 parallel requests (3-month windows, 2yr cap)
-        Server->>Schwab: Option chain window 1 (0-3mo)
-        Server->>Schwab: Option chain window 2 (3-6mo)
-        Server->>Schwab: Option chain windows 3-8...
-        Schwab-->>Server: Window 1 result
-        Server-->>Browser: NDJSON line 1: gexLevels + expirations + underlying
-        Note over Browser: Chart renders immediately
-        Schwab-->>Server: Window 2..8 results (as they arrive)
-        Server-->>Browser: NDJSON lines: updated expirationDates
-        Server-->>Browser: NDJSON final line: { done: true }
-    end
+    Browser->>Server: GET /api/stream/:symbol?types=price,gex (SSE)
+    Note over Server: Fires price + 8 option chain requests in parallel
+    Server->>Schwab: Price history API
+    Server->>Schwab: Option chain windows 1-8 (3-month intervals, 2yr cap)
+    Schwab-->>Server: Price data
+    Server-->>Browser: event: price
+    Schwab-->>Server: Window 1 result
+    Server-->>Browser: event: expirations
+    Server-->>Browser: event: gex (60-day default filter)
+    Note over Browser: Chart renders immediately
+    Schwab-->>Server: Window 2..8 results (as they arrive)
+    Server-->>Browser: event: expirations (updated dates)
+    Server-->>Browser: event: done
 ```
 
 ### GEX Calculation
@@ -75,14 +69,15 @@ Net  GEX = Call GEX + Put GEX
 
 GEX is aggregated per strike price across all selected expiration dates. Positive net GEX at a strike implies dealer hedging activity that dampens price movement (a "pin"), while negative net GEX implies amplification.
 
-### Streaming Response
+### SSE Streaming
 
-The `/api/gex/:symbol` endpoint uses **NDJSON streaming** (newline-delimited JSON) for the default load path:
+The `/api/stream/:symbol` endpoint uses **Server-Sent Events** with a `types` query param to control what data is streamed:
 
-1. All 8 Schwab option chain windows (3-month intervals, 2-year cap) are fired in parallel.
-2. The first window (0-3mo) is awaited and sent immediately with GEX levels computed for the default 60-day expiration filter.
-3. Remaining windows stream only new expiration dates as they resolve, updating the filter UI.
-4. When `?expirations=` is provided (user applied a custom filter), the endpoint falls back to a standard JSON response.
+- **`types=price,gex`** (initial symbol load): price history and all option chain windows are fetched in parallel. Events are sent as data resolves: `event: price` for candles, `event: expirations` for available dates, `event: gex` for GEX levels (60-day default filter), then `event: done`.
+- **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done`.
+- **`types=gex&expirations=...`** (custom filter): fetches all option chain windows, merges, calculates GEX with the specified expirations, sends `event: expirations` + `event: gex` + `event: done`.
+
+The server includes `selectedExpirations` in the `gex` event payload so the client knows exactly which dates were used in the calculation.
 
 ### Chart
 
@@ -144,8 +139,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | `/auth/login` | GET | Initiates Schwab OAuth flow |
 | `/auth/callback` | GET | OAuth callback handler |
 | `/auth/status` | GET | Returns `{ authenticated: boolean }` |
-| `/api/price/:symbol` | GET | Proxies Schwab price history. Query params: `frequencyType`, `frequency`, `periodType`, `period` |
-| `/api/gex/:symbol` | GET | Streams GEX data as NDJSON. Optional query param: `expirations` (comma-separated dates like `2025-03-21,2025-04-17`) |
+| `/api/stream/:symbol` | GET | SSE endpoint. Required: `types` (comma-separated: `price`, `gex`). Optional: `frequencyType`, `frequency`, `periodType`, `period` (price params), `expirations` (comma-separated dates for GEX filter) |
 
 ## Expiration Filter
 
@@ -157,6 +151,6 @@ The Expirations button in the header opens a multi-select dialog for filtering w
 
 ## Tech Stack
 
-- **Server**: Express + HTTPS (self-signed certs), TypeScript, `@sudowealth/schwab-api` for OAuth
-- **Frontend**: Vanilla JS ES modules, Three.js (WebGL orthographic renderer), no build step
+- **Server**: Express + HTTPS (self-signed certs), TypeScript, `@sudowealth/schwab-api` for OAuth, SSE streaming
+- **Frontend**: Vanilla JS ES modules, Three.js (WebGL orthographic renderer), native EventSource API, no build step
 - **API**: Schwab Market Data v1 (option chains, price history)

@@ -15,15 +15,14 @@ src/
 ├── gex.ts                 # Pure functions: calculateGEX(), getExpirationDates()
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
-│   ├── price.ts           # GET /api/price/:symbol
-│   └── gex.ts             # GET /api/gex/:symbol (streaming + filtered modes)
+│   └── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
 └── public/
     ├── index.html         # HTML shell (no embedded CSS or JS)
     ├── css/
     │   └── styles.css     # All CSS styles
     └── js/
         ├── main.js        # Entry point: init(), app state, event wiring
-        ├── api.js         # API fetch functions, NDJSON stream reader
+        ├── api.js         # API functions: openStream() via EventSource, checkAuth()
         ├── expDialog.js   # Expiration filter dialog logic
         └── chart/
             ├── constants.js   # COLORS, LAYOUT, FREQ_MAP, RANGE_MAP
@@ -55,13 +54,15 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
 - `fetchOptionChainAll()`: parallel fetch + merge of all windows (used for the filtered/non-streaming path).
 
-**GEX endpoint** (`src/routes/gex.ts` - `GET /api/gex/:symbol`):
-- Two modes:
-  1. **Streaming (default, no `?expirations=`)**: NDJSON (`application/x-ndjson`). First window (0-3mo) is awaited and sent first with GEX levels (60-day default filter). Remaining windows stream expiration date updates via `Promise.race`. Final line: `{ done: true }`.
-  2. **Non-streaming (`?expirations=date1,date2,...`)**: Standard JSON. Fetches all windows, merges, calculates GEX with the provided filter.
-
-**Price endpoint** (`src/routes/price.ts` - `GET /api/price/:symbol`):
-- Proxies Schwab's `/pricehistory` endpoint. Params: `frequencyType`, `frequency`, `periodType`, `period`.
+**Stream endpoint** (`src/routes/stream.ts` - `GET /api/stream/:symbol`):
+- Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
+  - `price`: fetches Schwab `/pricehistory`, sends `event: price`. Accepts `frequencyType`, `frequency`, `periodType`, `period` query params.
+  - `gex`: fetches option chain windows, sends `event: gex` (first window, 60-day default filter) then `event: expirations` (subsequent windows). If `expirations` query param is provided, fetches all windows, merges, calculates GEX with the filter, sends a single `event: gex`.
+- All requests end with `event: done`. Price and GEX fetches run concurrently when both types are requested.
+- Usage scenarios:
+  - Initial symbol load: `?types=price,gex`
+  - Freq/range change: `?types=price`
+  - Expiration filter apply: `?types=gex&expirations=date1,date2,...`
 
 ### Frontend
 
@@ -81,10 +82,10 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `state.currentSymbol`: currently loaded ticker.
 - `state.allExpirations`: all available expiration dates (grows as stream delivers).
 - `state.selectedExpirations`: Set of currently selected dates for GEX filter.
+- `state.activeStream`: current `EventSource` instance (closed before opening a new one).
 
 **API layer** (`src/public/js/api.js`):
-- `loadGEX(symbol, chart, state, { useFilter })`: if `useFilter`, does standard `fetch` + `res.json()`. Otherwise reads NDJSON stream via `response.body.getReader()`, renders chart on first chunk, updates expirations on subsequent chunks.
-- `loadPrice(symbol, chart)`: fetches price history, renders candles.
+- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Attaches typed event listeners (`price`, `gex`, `expirations`, `done`, `error`). Returns the `EventSource` so the caller can close it on abort.
 - `checkAuth()`: checks `/auth/status`.
 
 ## Development Commands
@@ -108,14 +109,14 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 ## Important Patterns
 
 - **No frontend build step**: frontend uses native ES module `.js` files. Three.js is loaded via CDN import map in `index.html`.
-- **Streaming pattern**: the NDJSON streaming in `src/routes/gex.ts` uses `res.write()` + `res.end()` with `Promise.race` for out-of-order window resolution.
-- **Expiration filter default**: both server (`src/routes/gex.ts`) and client (`src/public/js/main.js`) independently compute a 60-day cutoff for the default expiration selection, keeping them in sync.
+- **SSE streaming**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `gex`, `expirations`, `done`, `error`). The client uses native `EventSource` API. The `types` query param controls which data types are fetched and streamed. Price and GEX fetches run concurrently when both are requested.
+- **Expiration filter default**: the server (`src/routes/stream.ts`) computes the 60-day cutoff for the default expiration selection and returns `selectedExpirations` in the `gex` event payload. The client sets its state directly from the server response — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
 
 ## Common Modification Patterns
 
-**Adding a new API endpoint**: Create a new route file in `src/routes/` or add to an existing one. Use the `getSchwabAuth()` pattern to get the auth instance. Register the route in `src/server.ts`.
+**Adding a new API endpoint**: For new data types, add a handler in `src/routes/stream.ts` and register a new `types` value. For non-streaming endpoints, create a new route file in `src/routes/`. Use the `getSchwabAuth()` pattern to get the auth instance. Register the route in `src/server.ts`.
 
 **Changing the chart layout**: Modify `LAYOUT` constants in `src/public/js/chart/constants.js` and `_sectionBounds()` in `GEXChart.js`.
 
@@ -125,6 +126,6 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Adjusting the date window size or cap**: Change the `3` (months) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`.
 
-**Adjusting the default expiration filter**: Change the `60` (days) in both `src/routes/gex.ts` and `src/public/js/main.js`'s `updateExpirationsFromData()`.
+**Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
 **Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from `rebuild()` in `GEXChart.js`.
