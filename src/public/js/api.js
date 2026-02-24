@@ -53,18 +53,24 @@ export function openStream(symbol, { types, chart, state, expirations }) {
     qs.set('expirations', [...expirations].join(','));
   }
 
-  const loading = document.getElementById('loading');
-  loading.style.display = 'block';
-  loading.textContent = `Loading ${symbol}...`;
+  const priceLoading = document.getElementById('loading-price');
+  const gexLoading = document.getElementById('loading-gex');
+  const wantsPrice = types.includes('price');
+  const wantsGex = types.includes('gex');
+
+  if (wantsPrice) priceLoading.style.display = 'block';
+  if (wantsGex) gexLoading.style.display = 'block';
 
   const es = new EventSource(`/api/stream/${encodeURIComponent(symbol)}?${qs}`);
 
   es.addEventListener('price', (e) => {
+    priceLoading.style.display = 'none';
     const priceData = JSON.parse(e.data);
     chart.loadPriceData(priceData);
   });
 
   es.addEventListener('gex', (e) => {
+    gexLoading.style.display = 'none';
     const gexData = JSON.parse(e.data);
     applyGexHeader(gexData);
     chart.loadGEXData(gexData);
@@ -83,12 +89,14 @@ export function openStream(symbol, { types, chart, state, expirations }) {
   });
 
   es.addEventListener('done', () => {
-    loading.style.display = 'none';
+    priceLoading.style.display = 'none';
+    gexLoading.style.display = 'none';
     es.close();
   });
 
   es.addEventListener('error', () => {
-    loading.textContent = 'Stream error.';
+    priceLoading.style.display = 'none';
+    gexLoading.style.display = 'none';
     es.close();
   });
 

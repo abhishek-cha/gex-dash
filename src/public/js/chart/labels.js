@@ -58,15 +58,6 @@ export function updateLabels(chart) {
   if (chart.gexLevels.length > 0) {
     addGexScale(chart, overlay, s);
     addNetGexScale(chart, overlay, s);
-  } else {
-    for (const [sec, text] of [[s.gex, 'Loading GEX...'], [s.netGex, 'Loading...']]) {
-      const lbl = document.createElement('div');
-      lbl.className = 'gex-loading-label';
-      lbl.style.left = sec.left + sec.width / 2 + 'px';
-      lbl.style.top = '50%';
-      lbl.textContent = text;
-      overlay.appendChild(lbl);
-    }
   }
 }
 
