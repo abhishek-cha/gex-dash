@@ -6,10 +6,27 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 
 ```
 src/
-├── server.ts          # Express HTTPS server, Schwab OAuth, API proxy
-├── gex.ts             # GEX calculation engine
+├── server.ts              # Express setup, route registration, HTTPS bootstrap
+├── certs.ts               # Self-signed TLS certificate generation
+├── schwab.ts              # Schwab OAuth, token persistence, API fetch functions
+├── gex.ts                 # GEX calculation engine
+├── routes/
+│   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
+│   ├── price.ts           # GET /api/price/:symbol
+│   └── gex.ts             # GET /api/gex/:symbol (streaming + filtered)
 └── public/
-    └── index.html     # Single-page app (Three.js chart + UI)
+    ├── index.html         # HTML shell
+    ├── css/styles.css     # All styles
+    └── js/
+        ├── main.js        # Entry point, app state, event wiring
+        ├── api.js         # API calls, NDJSON stream reader
+        ├── expDialog.js   # Expiration filter dialog
+        └── chart/
+            ├── constants.js   # Colors, layout, frequency/range maps
+            ├── GEXChart.js    # Core chart class (Three.js scene, coordinates)
+            ├── renderers.js   # Candle, GEX bar, grid rendering
+            ├── interaction.js # Drag, zoom, crosshair, tooltip
+            └── labels.js      # DOM label overlays
 ```
 
 ### Data Flow
@@ -67,16 +84,9 @@ The `/api/gex/:symbol` endpoint uses **NDJSON streaming** (newline-delimited JSO
 3. Remaining windows stream only new expiration dates as they resolve, updating the filter UI.
 4. When `?expirations=` is provided (user applied a custom filter), the endpoint falls back to a standard JSON response.
 
-### Chart Layout
+### Chart
 
-The UI is a single `index.html` with an embedded Three.js orthographic scene divided into four sections:
-
-| Section | Width | Content |
-|---------|-------|---------|
-| Candlestick | ~65% | OHLCV price candles with pan/zoom |
-| Price Axis | 60px | Y-axis price labels |
-| Call/Put GEX | ~22% | Horizontal bars: calls right, puts left |
-| Net GEX | ~13% | Horizontal bars showing net exposure |
+![GEX Dash — AAPL with candlestick chart, call/put GEX bars, and net GEX](docs/screenshot.png)
 
 ## Chart Interactions
 
@@ -148,5 +158,5 @@ The Expirations button in the header opens a multi-select dialog for filtering w
 ## Tech Stack
 
 - **Server**: Express + HTTPS (self-signed certs), TypeScript, `@sudowealth/schwab-api` for OAuth
-- **Frontend**: Vanilla JS, Three.js (WebGL orthographic renderer), no build step
+- **Frontend**: Vanilla JS ES modules, Three.js (WebGL orthographic renderer), no build step
 - **API**: Schwab Market Data v1 (option chains, price history)
