@@ -6,6 +6,7 @@ import { ensureCerts } from "./certs.js";
 import { initSchwabAuth } from "./schwab.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerStreamRoutes } from "./routes/stream.js";
+import { registerWatchlistRoutes } from "./routes/watchlist.js";
 import "dotenv/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -20,6 +21,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 registerAuthRoutes(app, () => schwabAuth);
 registerStreamRoutes(app, () => schwabAuth);
+registerWatchlistRoutes(app, projectRoot);
 
 const sslOpts = ensureCerts(projectRoot);
 https.createServer(sslOpts, app).listen(PORT, () => {

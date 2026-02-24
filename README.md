@@ -12,14 +12,16 @@ src/
 ├── gex.ts                 # GEX calculation engine
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
-│   └── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
+│   ├── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
+│   └── watchlist.ts       # GET/POST/DELETE /api/watchlist (persisted to watchlist.json)
 └── public/
     ├── index.html         # HTML shell
     ├── css/styles.css     # All styles
     └── js/
         ├── main.js        # Entry point, app state, event wiring
         ├── api.js         # API calls, SSE stream via EventSource
-        ├── expDialog.js   # Expiration filter dialog
+        ├── expDialog.js       # Expiration filter dialog
+        ├── watchlistDialog.js # Watchlist dialog
         └── chart/
             ├── constants.js   # Colors, layout, frequency/range maps
             ├── GEXChart.js    # Core chart class (Three.js scene, coordinates)
@@ -131,6 +133,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 1. Click **Connect with Schwab** to authenticate.
 2. After OAuth redirect, the app loads AAPL by default.
 3. Enter any symbol in the search box and press Enter or click Load.
+4. Click **Watchlist** to save symbols for quick access.
 
 ## API Endpoints
 
@@ -140,6 +143,9 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | `/auth/callback` | GET | OAuth callback handler |
 | `/auth/status` | GET | Returns `{ authenticated: boolean }` |
 | `/api/stream/:symbol` | GET | SSE endpoint. Required: `types` (comma-separated: `price`, `gex`). Optional: `frequencyType`, `frequency`, `periodType`, `period` (price params), `expirations` (comma-separated dates for GEX filter) |
+| `/api/watchlist` | GET | Returns saved watchlist symbols as JSON array |
+| `/api/watchlist/:symbol` | POST | Adds a symbol to the watchlist |
+| `/api/watchlist/:symbol` | DELETE | Removes a symbol from the watchlist |
 
 ## Expiration Filter
 
@@ -148,6 +154,16 @@ The Expirations button in the header opens a multi-select dialog for filtering w
 - **Default**: Expirations within 60 days are selected.
 - **All dates**: Available up to 2 years out, streamed progressively as Schwab windows resolve.
 - Applying a custom filter re-fetches GEX with only the selected expirations.
+
+## Watchlist
+
+The Watchlist button (beside Load) opens a dialog for saving frequently used symbols:
+
+- **Add**: Type a symbol and press Enter or click **+** to save it.
+- **Load**: Click any symbol in the list to load its chart immediately.
+- **Remove**: Click the **×** next to a symbol to delete it.
+
+Symbols are persisted in `watchlist.json` at the project root (gitignored). The file is created automatically on first use.
 
 ## Tech Stack
 

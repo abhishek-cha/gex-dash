@@ -1,6 +1,7 @@
 import { GEXChart } from './chart/GEXChart.js';
 import { checkAuth, openStream } from './api.js';
 import { openExpDialog, closeExpDialog, applyExpFilter } from './expDialog.js';
+import { openWatchlist, closeWatchlist } from './watchlistDialog.js';
 
 // --- App state ---
 
@@ -136,6 +137,17 @@ async function init() {
   });
   document.getElementById('exp-dialog-backdrop').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeExpDialog();
+  });
+
+  document.getElementById('watchlist-btn').addEventListener('click', () => {
+    openWatchlist((sym) => {
+      input.value = sym;
+      loadSymbol(sym);
+    });
+  });
+  document.getElementById('wl-dialog-close').addEventListener('click', closeWatchlist);
+  document.getElementById('wl-dialog-backdrop').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeWatchlist();
   });
 
   input.value = 'AAPL';

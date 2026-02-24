@@ -43,6 +43,7 @@
     <div class="search-box">
       <input type="text" id="symbol-input" placeholder="Symbol (e.g. AAPL)" />
       <button id="load-btn">Load</button>
+      <button id="watchlist-btn">Watchlist</button>
     </div>
   </div>
 
@@ -62,6 +63,20 @@
       </div>
     </div>
   </div>
+  <div id="wl-dialog-backdrop">
+    <div id="wl-dialog">
+      <div id="wl-dialog-header">
+        <h3>Watchlist</h3>
+        <button id="wl-dialog-close">&times;</button>
+      </div>
+      <div id="wl-dialog-add">
+        <input type="text" id="wl-add-input" placeholder="Add symbol…" />
+        <button id="wl-add-btn">+</button>
+      </div>
+      <div id="wl-dialog-list"></div>
+    </div>
+  </div>
+
   <div id="chart-wrap">
     <div id="loading-price" class="section-loading">Loading price...</div>
     <div id="loading-gex" class="section-loading">Loading GEX...</div>
