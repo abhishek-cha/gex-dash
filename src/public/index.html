@@ -1139,6 +1139,35 @@ class GEXChart {
         tooltip.style.display = 'none';
       }
     });
+
+    el.addEventListener('wheel', (e) => {
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const s = this._sectionBounds();
+      const inCandle = mx >= s.candle.left && mx <= s.candle.right && my <= (this.height - LAYOUT.marginBottom);
+      if (!inCandle) return;
+
+      e.preventDefault();
+      const zoomFactor = Math.pow(1.03, e.deltaY > 0 ? 1 : -1);
+
+      const anchorFrac = (mx - s.candle.left) / s.candle.width;
+      const visCount = this.viewEndIdx - this.viewStartIdx;
+      const anchorIdx = this.viewStartIdx + anchorFrac * visCount;
+      const newCount = Math.max(5, visCount * zoomFactor);
+      this.viewStartIdx = anchorIdx - anchorFrac * newCount;
+      this.viewEndIdx = anchorIdx + (1 - anchorFrac) * newCount;
+
+      const priceFrac = 1 - (my - (this.height - s.top)) / s.chartH;
+      const priceRange = this.viewPriceMax - this.viewPriceMin;
+      const anchorPrice = this.viewPriceMin + priceFrac * priceRange;
+      const newRange = Math.max(0.01, priceRange * zoomFactor);
+      this.viewPriceMin = anchorPrice - priceFrac * newRange;
+      this.viewPriceMax = anchorPrice + (1 - priceFrac) * newRange;
+      this._manualYScale = true;
+
+      this.rebuild();
+    }, { passive: false });
   }
 
   _nearestGexLevel(price) {
