@@ -188,6 +188,20 @@
     }
     #crosshair-h { height: 1px; left: 0; right: 0; }
     #crosshair-v { width: 1px; top: 0; bottom: 0; }
+    #crosshair-price {
+      position: absolute;
+      pointer-events: none;
+      display: none;
+      font-size: 11px;
+      font-weight: 600;
+      color: #e6edf3;
+      background: #30363d;
+      padding: 1px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      transform: translateY(-50%);
+      z-index: 5;
+    }
     #tooltip {
       position: absolute;
       background: #1c2128;
@@ -390,6 +404,7 @@
     <div id="labels-overlay"></div>
     <div id="crosshair-h"></div>
     <div id="crosshair-v"></div>
+    <div id="crosshair-price"></div>
     <div id="tooltip"></div>
   </div>
 </div>
@@ -931,6 +946,7 @@ class GEXChart {
     const el = this.container;
     const chH = document.getElementById('crosshair-h');
     const chV = document.getElementById('crosshair-v');
+    const chPrice = document.getElementById('crosshair-price');
     const tooltip = document.getElementById('tooltip');
 
     this._axisDrag = { active: false, startY: 0, startPriceMin: 0, startPriceMax: 0, anchorFrac: 0 };
@@ -1051,6 +1067,11 @@ class GEXChart {
 
         const price = this._yToPrice(this.height - my);
 
+        chPrice.style.display = 'block';
+        chPrice.style.top = my + 'px';
+        chPrice.style.left = s.axis.left + 2 + 'px';
+        chPrice.textContent = price.toFixed(price >= 1000 ? 0 : 2);
+
         if (mx >= s.candle.left && mx <= s.candle.right) {
           const visCount = this.viewEndIdx - this.viewStartIdx;
           const idx = Math.floor(
@@ -1095,6 +1116,7 @@ class GEXChart {
       } else {
         chH.style.display = 'none';
         chV.style.display = 'none';
+        chPrice.style.display = 'none';
         tooltip.style.display = 'none';
         if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) el.style.cursor = '';
       }
@@ -1136,6 +1158,7 @@ class GEXChart {
       if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) {
         chH.style.display = 'none';
         chV.style.display = 'none';
+        chPrice.style.display = 'none';
         tooltip.style.display = 'none';
       }
     });
