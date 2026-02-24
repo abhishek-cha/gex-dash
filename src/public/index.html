@@ -934,7 +934,7 @@ class GEXChart {
     const tooltip = document.getElementById('tooltip');
 
     this._axisDrag = { active: false, startY: 0, startPriceMin: 0, startPriceMax: 0, anchorFrac: 0 };
-    this._chartDrag = { active: false, startX: 0, startViewStart: 0, startViewEnd: 0 };
+    this._chartDrag = { active: false, startX: 0, startY: 0, startViewStart: 0, startViewEnd: 0, startPriceMin: 0, startPriceMax: 0 };
     this._xAxisDrag = { active: false, startX: 0, startViewStart: 0, startViewEnd: 0, anchorFrac: 0 };
     this._manualYScale = false;
 
@@ -966,8 +966,12 @@ class GEXChart {
         e.preventDefault();
         this._chartDrag.active = true;
         this._chartDrag.startX = e.clientX;
+        this._chartDrag.startY = e.clientY;
         this._chartDrag.startViewStart = this.viewStartIdx;
         this._chartDrag.startViewEnd = this.viewEndIdx;
+        this._chartDrag.startPriceMin = this.viewPriceMin;
+        this._chartDrag.startPriceMax = this.viewPriceMax;
+        this._manualYScale = true;
         el.style.cursor = 'grabbing';
         tooltip.style.display = 'none';
       }
@@ -992,19 +996,17 @@ class GEXChart {
       if (this._chartDrag.active) {
         const s = this._sectionBounds();
         const dx = e.clientX - this._chartDrag.startX;
+        const dy = e.clientY - this._chartDrag.startY;
         const visCount = this._chartDrag.startViewEnd - this._chartDrag.startViewStart;
 
         const idxShift = -(dx / s.candle.width) * visCount;
-        let newStart = this._chartDrag.startViewStart + idxShift;
-        let newEnd = this._chartDrag.startViewEnd + idxShift;
+        this.viewStartIdx = this._chartDrag.startViewStart + idxShift;
+        this.viewEndIdx = this._chartDrag.startViewEnd + idxShift;
 
-        if (newStart < 0) { newEnd -= newStart; newStart = 0; }
-        if (newEnd > this.priceData.length) { newStart -= (newEnd - this.priceData.length); newEnd = this.priceData.length; }
-        newStart = Math.max(0, newStart);
-
-        this.viewStartIdx = newStart;
-        this.viewEndIdx = newEnd;
-        this._autoFitY();
+        const priceRange = this._chartDrag.startPriceMax - this._chartDrag.startPriceMin;
+        const priceShift = (dy / s.chartH) * priceRange;
+        this.viewPriceMin = this._chartDrag.startPriceMin + priceShift;
+        this.viewPriceMax = this._chartDrag.startPriceMax + priceShift;
 
         this.rebuild();
         return;
@@ -1016,18 +1018,10 @@ class GEXChart {
         const origCount = this._xAxisDrag.startViewEnd - this._xAxisDrag.startViewStart;
         const anchorIdx = this._xAxisDrag.startViewStart + this._xAxisDrag.anchorFrac * origCount;
         const zoomFactor = Math.pow(2, dx / (s.candle.width * 0.5));
-        let newCount = origCount * zoomFactor;
-        newCount = Math.max(5, Math.min(this.priceData.length, newCount));
+        const newCount = Math.max(5, origCount * zoomFactor);
 
-        let newStart = anchorIdx - this._xAxisDrag.anchorFrac * newCount;
-        let newEnd = anchorIdx + (1 - this._xAxisDrag.anchorFrac) * newCount;
-        if (newStart < 0) { newEnd -= newStart; newStart = 0; }
-        if (newEnd > this.priceData.length) { newStart -= (newEnd - this.priceData.length); newEnd = this.priceData.length; }
-        newStart = Math.max(0, newStart);
-
-        this.viewStartIdx = newStart;
-        this.viewEndIdx = newEnd;
-        this._autoFitY();
+        this.viewStartIdx = anchorIdx - this._xAxisDrag.anchorFrac * newCount;
+        this.viewEndIdx = anchorIdx + (1 - this._xAxisDrag.anchorFrac) * newCount;
 
         this.rebuild();
         return;
