@@ -9,6 +9,7 @@ export const COLORS = {
   putGex:       0xf44336,
   netGex:       0x00bcd4,
   volume:       0x00bcd4,
+  volumeAlert:  0xff9800,
   separator:    0x30363d,
 };
 

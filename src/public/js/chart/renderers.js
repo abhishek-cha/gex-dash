@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { COLORS, LAYOUT } from './constants.js';
 
 export function buildGrid(chart) {
@@ -100,6 +101,15 @@ export function buildVolumeBars(chart) {
     chart.groups.volumeBars.add(
       chart._makePlane(s.volume.left + 2, barY, w, barH, COLORS.volume, 0.85)
     );
+
+    if (level.totalVolume > 0 && level.totalOI > 0 && level.totalVolume > level.totalOI) {
+      const r = Math.max(2, Math.min(barH * 0.3, 4));
+      const geo = new THREE.CircleGeometry(r, 16);
+      const mat = new THREE.MeshBasicMaterial({ color: COLORS.volumeAlert });
+      const dot = new THREE.Mesh(geo, mat);
+      dot.position.set(s.volume.left + 2 + w + r + 2, barY + barH / 2, 0);
+      chart.groups.volumeBars.add(dot);
+    }
   }
 }
 

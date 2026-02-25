@@ -147,3 +147,5 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
 **Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from `rebuild()` in `GEXChart.js`.
+
+**Volume alert dot**: In `renderers.js`, `buildVolumeBars()` renders a small orange circle (`COLORS.volumeAlert`) beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.

@@ -1,6 +1,6 @@
 # GEX Dash
 
-Real-time Gamma Exposure (GEX) visualization for equities and index options, powered by the Schwab API. Renders candlestick price charts alongside call/put and net GEX bar charts using Three.js.
+Real-time Gamma Exposure (GEX) visualization for equities and index options, powered by the Schwab API. Renders candlestick price charts alongside call/put GEX bars and per-strike options volume using Three.js.
 
 ## Architecture
 
@@ -25,9 +25,9 @@ src/
         └── chart/
             ├── constants.js   # Colors, layout, frequency/range maps
             ├── GEXChart.js    # Core chart class (Three.js scene, coordinates)
-            ├── renderers.js   # Candle, GEX bar, grid rendering
-            ├── interaction.js # Drag, zoom, crosshair, tooltip
-            └── labels.js      # DOM label overlays
+            ├── renderers.js   # Candle, GEX bar, volume bar, grid rendering
+            ├── interaction.js # Drag, zoom, crosshair, tooltip, bar highlight
+            └── labels.js      # DOM label overlays (price, dates, GEX/volume scales)
 ```
 
 ### Data Flow
@@ -69,7 +69,7 @@ Put  GEX = |gamma| * openInterest * 100 * spotPrice * -1
 Net  GEX = Call GEX + Put GEX
 ```
 
-GEX is aggregated per strike price across all selected expiration dates. Positive net GEX at a strike implies dealer hedging activity that dampens price movement (a "pin"), while negative net GEX implies amplification.
+GEX is aggregated per strike price across all selected expiration dates. Total options volume and open interest are also aggregated per strike. Positive net GEX at a strike implies dealer hedging activity that dampens price movement (a "pin"), while negative net GEX implies amplification. Strikes where volume exceeds open interest are flagged with an orange dot.
 
 ### SSE Streaming
 
@@ -83,7 +83,7 @@ The server includes `selectedExpirations` in the `gex` event payload so the clie
 
 ### Chart
 
-![GEX Dash — AAPL with candlestick chart, call/put GEX bars, and net GEX](docs/screenshot.png)
+![GEX Dash — AAPL with candlestick chart, call/put GEX bars, and volume](docs/screenshot.png)
 
 ## Chart Interactions
 
@@ -94,6 +94,7 @@ The server includes `selectedExpirations` in the `gex` event payload so the clie
 | Price axis | Click + drag up/down | Zoom price scale around click point |
 | Price axis | Double-click | Reset to auto-fit Y |
 | X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
+| Anywhere | Crosshair hover | Tooltip on GEX section shows nearest strike's call/put/net GEX, volume, and OI; hovered bars glow |
 
 All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.
 
