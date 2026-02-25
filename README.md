@@ -8,7 +8,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 src/
 ├── server.ts              # Express setup, route registration, HTTPS bootstrap
 ├── certs.ts               # Self-signed TLS certificate generation
-├── schwab.ts              # Schwab OAuth, token persistence, API fetch functions
+├── schwab.ts              # Schwab OAuth, token persistence, API fetch functions (quote, price, chains)
 ├── gex.ts                 # GEX calculation engine
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
@@ -44,10 +44,13 @@ sequenceDiagram
     Server->>Schwab: Exchange code for tokens
     Server-->>Browser: Redirect to /
 
-    Browser->>Server: GET /api/stream/:symbol?types=price,gex (SSE)
-    Note over Server: Fires price + 8 option chain requests in parallel
+    Browser->>Server: GET /api/stream/:symbol?types=price,gex,quote (SSE)
+    Note over Server: Fires price, quote, + 8 option chain requests in parallel
+    Server->>Schwab: Quote API
     Server->>Schwab: Price history API
     Server->>Schwab: Option chain windows 1-8 (3-month intervals, 2yr cap)
+    Schwab-->>Server: Quote data
+    Server-->>Browser: event: quote
     Schwab-->>Server: Price data
     Server-->>Browser: event: price
     Schwab-->>Server: Window 1 result
@@ -75,11 +78,11 @@ GEX is aggregated per strike price across all selected expiration dates. Total o
 
 The `/api/stream/:symbol` endpoint uses **Server-Sent Events** with a `types` query param to control what data is streamed:
 
-- **`types=price,gex`** (initial symbol load): price history and all option chain windows are fetched in parallel. Events are sent as data resolves: `event: price` for candles, `event: expirations` for available dates, `event: gex` for GEX levels (60-day default filter), then `event: done`.
+- **`types=price,gex,quote`** (initial symbol load): price history, quote, and all option chain windows are fetched in parallel. Events are sent as data resolves: `event: price` for candles, `event: quote` for current price/change, `event: expirations` for available dates, `event: gex` for GEX levels (60-day default filter), then `event: done`.
 - **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done`.
-- **`types=gex&expirations=...`** (custom filter): fetches all option chain windows, merges, calculates GEX with the specified expirations, sends `event: expirations` + `event: gex` + `event: done`.
+- **`types=gex,quote&expirations=...`** (custom filter): fetches option chains and quote in parallel, sends `event: quote` + `event: expirations` + `event: gex` + `event: done`.
 
-The server includes `selectedExpirations` in the `gex` event payload so the client knows exactly which dates were used in the calculation.
+The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint (lightweight, no option chain needed) and carries `{ price, change, percentChange }`. The `gex` event includes `selectedExpirations` so the client knows exactly which dates were used in the calculation.
 
 ### Chart
 
@@ -143,7 +146,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | `/auth/login` | GET | Initiates Schwab OAuth flow |
 | `/auth/callback` | GET | OAuth callback handler |
 | `/auth/status` | GET | Returns `{ authenticated: boolean }` |
-| `/api/stream/:symbol` | GET | SSE endpoint. Required: `types` (comma-separated: `price`, `gex`). Optional: `frequencyType`, `frequency`, `periodType`, `period` (price params), `expirations` (comma-separated dates for GEX filter) |
+| `/api/stream/:symbol` | GET | SSE endpoint. Required: `types` (comma-separated: `price`, `gex`, `quote`). Optional: `frequencyType`, `frequency`, `periodType`, `period` (price params), `expirations` (comma-separated dates for GEX filter) |
 | `/api/watchlist` | GET | Returns saved watchlist symbols as JSON array |
 | `/api/watchlist/:symbol` | POST | Adds a symbol to the watchlist |
 | `/api/watchlist/:symbol` | DELETE | Removes a symbol from the watchlist |
@@ -170,4 +173,4 @@ Symbols are persisted in `watchlist.json` at the project root (gitignored). The 
 
 - **Server**: Express + HTTPS (self-signed certs), TypeScript, `@sudowealth/schwab-api` for OAuth, SSE streaming
 - **Frontend**: Vanilla JS ES modules, Three.js (WebGL orthographic renderer), native EventSource API, no build step
-- **API**: Schwab Market Data v1 (option chains, price history)
+- **API**: Schwab Market Data v1 (quotes, option chains, price history)

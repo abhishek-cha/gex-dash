@@ -127,7 +127,11 @@ export class GEXChart {
 
   loadGEXData(gexData) {
     this.gexLevels = gexData.gexLevels || [];
-    this.spotPrice = gexData.underlyingPrice || gexData.underlying?.last || 0;
+    this.rebuild();
+  }
+
+  setSpotPrice(price) {
+    this.spotPrice = price || 0;
     this.rebuild();
   }
 

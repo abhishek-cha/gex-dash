@@ -5,6 +5,7 @@ import {
   fetchOptionChainAll,
   fetchOptionChainWindow,
   fetchPriceHistory,
+  fetchQuote,
 } from "../schwab.js";
 import { calculateGEX, getExpirationDates } from "../gex.js";
 
@@ -35,6 +36,22 @@ async function streamPrice(
   if (!aborted()) sendEvent(res, "price", priceHistory);
 }
 
+async function streamQuote(
+  res: Response,
+  symbol: string,
+  accessToken: string,
+  aborted: () => boolean
+) {
+  const quote = await fetchQuote(symbol, accessToken);
+  if (!aborted()) {
+    sendEvent(res, "quote", {
+      price: quote.lastPrice ?? quote.mark ?? 0,
+      change: quote.netChange ?? 0,
+      percentChange: quote.netPercentChangeInDouble ?? 0,
+    });
+  }
+}
+
 async function streamGEX(
   res: Response,
   symbol: string,
@@ -52,8 +69,6 @@ async function streamGEX(
     sendEvent(res, "gex", {
       gexLevels,
       selectedExpirations: [...selectedExpirations],
-      underlying: optionChain.underlying,
-      underlyingPrice: optionChain.underlyingPrice,
     });
     return;
   }
@@ -84,8 +99,6 @@ async function streamGEX(
     sendEvent(res, "gex", {
       gexLevels,
       selectedExpirations: selected ? [...selected] : [...allExpDates].sort(),
-      underlying: firstChunk.underlying,
-      underlyingPrice: firstChunk.underlyingPrice,
     });
   }
 
@@ -157,6 +170,15 @@ export function registerStreamRoutes(
           streamPrice(req, res, symbol, accessToken, aborted).catch((err) => {
             console.error("Price stream error:", err?.message || err);
             if (!aborted()) sendEvent(res, "error", { type: "price", error: "Failed to fetch price data" });
+          })
+        );
+      }
+
+      if (types.has("quote")) {
+        tasks.push(
+          streamQuote(res, symbol, accessToken, aborted).catch((err) => {
+            console.error("Quote stream error:", err?.message || err);
+            if (!aborted()) sendEvent(res, "error", { type: "quote", error: "Failed to fetch quote" });
           })
         );
       }

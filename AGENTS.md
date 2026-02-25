@@ -10,8 +10,8 @@ GEX Dash is a single-page web app that visualizes Gamma Exposure (GEX) for equit
 src/
 ├── server.ts              # Express setup, static serving, route registration, HTTPS bootstrap
 ├── certs.ts               # Self-signed TLS certificate generation
-├── schwab.ts              # Schwab OAuth setup, token persistence, all Schwab API fetch functions,
-│                          #   date windowing, option chain merging
+├── schwab.ts              # Schwab OAuth setup, token persistence, all Schwab API fetch functions
+│                          #   (quote, price history, option chains), date windowing, option chain merging
 ├── gex.ts                 # Pure functions: calculateGEX(), getExpirationDates()
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
@@ -66,18 +66,19 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **Stream endpoint** (`src/routes/stream.ts` - `GET /api/stream/:symbol`):
 - Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
   - `price`: fetches Schwab `/pricehistory`, sends `event: price`. Accepts `frequencyType`, `frequency`, `periodType`, `period` query params.
+  - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`.
   - `gex`: fetches option chain windows, sends `event: gex` (first window, 60-day default filter) then `event: expirations` (subsequent windows). If `expirations` query param is provided, fetches all windows, merges, calculates GEX with the filter, sends a single `event: gex`.
 - All requests end with `event: done`. Price and GEX fetches run concurrently when both types are requested.
 - Usage scenarios:
-  - Initial symbol load: `?types=price,gex`
+  - Initial symbol load: `?types=price,gex,quote`
   - Freq/range change: `?types=price`
-  - Expiration filter apply: `?types=gex&expirations=date1,date2,...`
+  - Expiration filter apply: `?types=gex,quote&expirations=date1,date2,...`
 
 ### Frontend
 
 **`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
 - Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
-- Key methods: `loadPriceData()`, `loadGEXData()`, `clearGEX()`, `rebuild()`, `highlightStrike(level)`, `clearHighlight()`.
+- Key methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `rebuild()`, `highlightStrike(level)`, `clearHighlight()`.
 - `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
 - Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
 
@@ -102,7 +103,8 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `state.activeStream`: current `EventSource` instance (closed before opening a new one).
 
 **API layer** (`src/public/js/api.js`):
-- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Attaches typed event listeners (`price`, `gex`, `expirations`, `done`, `error`). Returns the `EventSource` so the caller can close it on abort.
+- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Attaches typed event listeners (`price`, `quote`, `gex`, `expirations`, `done`, `error`). Returns the `EventSource` so the caller can close it on abort.
+- `applyQuote(quoteData, chart)`: updates the header price/change display and calls `chart.setSpotPrice()`.
 - `checkAuth()`: checks `/auth/status`.
 
 ## Development Commands
@@ -126,7 +128,7 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 ## Important Patterns
 
 - **No frontend build step**: frontend uses native ES module `.js` files. Three.js is loaded via CDN import map in `index.html`.
-- **SSE streaming**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `gex`, `expirations`, `done`, `error`). The client uses native `EventSource` API. The `types` query param controls which data types are fetched and streamed. Price and GEX fetches run concurrently when both are requested.
+- **SSE streaming**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint — lightweight and independent of the option chain. The client uses native `EventSource` API. The `types` query param controls which data types are fetched and streamed. Price and GEX fetches run concurrently when both are requested.
 - **Expiration filter default**: the server (`src/routes/stream.ts`) computes the 60-day cutoff for the default expiration selection and returns `selectedExpirations` in the `gex` event payload. The client sets its state directly from the server response — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.

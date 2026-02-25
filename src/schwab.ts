@@ -119,7 +119,6 @@ export async function fetchOptionChainWindow(
   const params = new URLSearchParams({
     symbol,
     contractType: "ALL",
-    includeUnderlyingQuote: "true",
     strategy: "SINGLE",
     range: "ALL",
     fromDate,
@@ -151,8 +150,6 @@ export async function fetchOptionChainAll(
   const merged: any = { callExpDateMap: {}, putExpDateMap: {} };
   for (const chunk of results) {
     if (!chunk) continue;
-    if (!merged.underlying && chunk.underlying)
-      merged.underlying = chunk.underlying;
     if (!merged.underlyingPrice && chunk.underlyingPrice)
       merged.underlyingPrice = chunk.underlyingPrice;
     if (chunk.callExpDateMap)
@@ -161,6 +158,21 @@ export async function fetchOptionChainAll(
       mergeExpDateMap(merged.putExpDateMap, chunk.putExpDateMap);
   }
   return merged;
+}
+
+export async function fetchQuote(
+  symbol: string,
+  accessToken: string
+): Promise<any> {
+  const resp = await fetch(
+    `${SCHWAB_API_BASE}/${encodeURIComponent(symbol)}/quotes`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!resp.ok) {
+    throw new Error(`Schwab quotes API returned ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data[symbol]?.quote || data[symbol] || {};
 }
 
 export async function fetchPriceHistory(

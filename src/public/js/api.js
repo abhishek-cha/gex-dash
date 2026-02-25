@@ -22,17 +22,18 @@ export function getPriceParams() {
   return { ...freq, ...range };
 }
 
-export function applyGexHeader(gexData) {
-  const underlying = gexData.underlying || {};
-  const price = gexData.underlyingPrice || underlying.last || 0;
-  const change = underlying.change || 0;
-  const pctChange = underlying.percentChange || 0;
+export function applyQuote(quoteData, chart) {
+  const price = quoteData.price || 0;
+  const change = quoteData.change || 0;
+  const pctChange = quoteData.percentChange || 0;
 
   document.getElementById('hdr-price').textContent = '$' + price.toFixed(2);
   const changeEl = document.getElementById('hdr-change');
   const sign = change >= 0 ? '+' : '';
   changeEl.textContent = `${sign}${change.toFixed(2)} (${sign}${pctChange.toFixed(2)}%)`;
   changeEl.className = 'change ' + (change >= 0 ? 'up' : 'down');
+
+  chart.setSpotPrice(price);
 }
 
 /**
@@ -69,10 +70,14 @@ export function openStream(symbol, { types, chart, state, expirations }) {
     chart.loadPriceData(priceData);
   });
 
+  es.addEventListener('quote', (e) => {
+    const quoteData = JSON.parse(e.data);
+    applyQuote(quoteData, chart);
+  });
+
   es.addEventListener('gex', (e) => {
     gexLoading.style.display = 'none';
     const gexData = JSON.parse(e.data);
-    applyGexHeader(gexData);
     chart.loadGEXData(gexData);
     if (gexData.selectedExpirations) {
       state.selectedExpirations = new Set(gexData.selectedExpirations);

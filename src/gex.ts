@@ -22,8 +22,7 @@ export function calculateGEX(
   optionChain: any,
   selectedExpirations?: Set<string>
 ): GEXLevel[] {
-  const spotPrice =
-    optionChain.underlyingPrice || optionChain.underlying?.last || 0;
+  const spotPrice = optionChain.underlyingPrice || 0;
   if (!spotPrice) return [];
 
   const shouldInclude = (expKey: string) => {

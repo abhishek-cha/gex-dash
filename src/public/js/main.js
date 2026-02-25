@@ -61,7 +61,7 @@ function loadSymbol(symbol) {
   c.clearGEX();
 
   state.activeStream = openStream(symbol, {
-    types: ['price', 'gex'],
+    types: ['price', 'gex', 'quote'],
     chart: c,
     state,
   });
@@ -81,7 +81,7 @@ function reloadGEXFiltered() {
   state.closeStream();
   const c = ensureChart();
   state.activeStream = openStream(state.currentSymbol, {
-    types: ['gex'],
+    types: ['gex', 'quote'],
     chart: c,
     state,
     expirations: state.selectedExpirations,
