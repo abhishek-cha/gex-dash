@@ -29,9 +29,9 @@ src/
         └── chart/
             ├── constants.js   # COLORS, LAYOUT, FREQ_MAP, RANGE_MAP
             ├── GEXChart.js    # Core chart class: scene, camera, coordinate transforms, rebuild
-            ├── renderers.js   # Candle, GEX bar, grid, separator, price line rendering
-            ├── interaction.js # Mouse drag, zoom, wheel, crosshair, tooltip handlers
-            └── labels.js      # DOM label overlay (price axis, dates, GEX scales)
+            ├── renderers.js   # Candle, GEX bar, volume bar, grid, separator, price line rendering
+            ├── interaction.js # Mouse drag, zoom, wheel, crosshair, tooltip, bar highlight
+            └── labels.js      # DOM label overlay (price axis, dates, GEX/volume scales)
 ```
 
 The frontend uses native ES modules (no build step or bundler). Three.js is loaded via CDN import map.
@@ -40,9 +40,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 ### GEX Calculation (`src/gex.ts`)
 
-- `GEXLevel` interface: `{ strike, callGex, putGex, netGex }`
+- `GEXLevel` interface: `{ strike, callGex, putGex, netGex, totalVolume, totalOI }`
 - `getExpirationDates(optionChain)`: extracts sorted unique expiration date strings from Schwab's `callExpDateMap`/`putExpDateMap` keys (format: `"YYYY-MM-DD:DTE"`, returns just the date portion)
-- `calculateGEX(optionChain, selectedExpirations?)`: iterates all contracts, filters by expiration if provided, aggregates GEX per strike. Formula: `|gamma| * OI * 100 * spotPrice` (negative for puts)
+- `calculateGEX(optionChain, selectedExpirations?)`: iterates all contracts, filters by expiration if provided, aggregates GEX per strike. Formula: `|gamma| * OI * 100 * spotPrice` (negative for puts). Also aggregates `totalVolume` and `totalOI` per strike.
 
 ### Server
 
@@ -76,8 +76,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 ### Frontend
 
 **`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
-- Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, net GEX bars.
-- Key methods: `loadPriceData()`, `loadGEXData()`, `clearGEX()`, `rebuild()`.
+- Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
+- Key methods: `loadPriceData()`, `loadGEXData()`, `clearGEX()`, `rebuild()`, `highlightStrike(level)`, `clearHighlight()`.
+- `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
 - Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
 
 **Chart interactions** (`src/public/js/chart/interaction.js`):
@@ -86,6 +87,8 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `_xAxisDrag`: click+drag on date labels area to zoom X scale, anchored to click point.
 - Double-click on candle area or price axis to reset to auto-fit.
 - `_manualYScale` flag prevents auto-fit from overriding user's Y zoom.
+- Tooltip is shown anchored to the GEX section based on crosshair Y position (nearest strike). Shows call/put/net GEX, volume, and OI. No tooltip on the candle area itself.
+- Crosshair triggers `highlightStrike()` / `clearHighlight()` for glow effect on hovered bars. Colors use `COLORS` constants via a `hexCss()` helper (no hardcoded hex strings).
 
 **Watchlist dialog** (`src/public/js/watchlistDialog.js`):
 - `openWatchlist(selectCb)`: fetches `/api/watchlist`, renders the list, opens the backdrop. `selectCb(symbol)` is called when a symbol is clicked.
@@ -133,7 +136,7 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Adding a new API endpoint**: For new data types, add a handler in `src/routes/stream.ts` and register a new `types` value. For non-streaming endpoints, create a new route file in `src/routes/`. Use the `getSchwabAuth()` pattern to get the auth instance. Register the route in `src/server.ts`.
 
-**Changing the chart layout**: Modify `LAYOUT` constants in `src/public/js/chart/constants.js` and `_sectionBounds()` in `GEXChart.js`.
+**Changing the chart layout**: Modify `LAYOUT` constants (e.g. `gexSectionRatio`, `volumeSectionRatio`) in `src/public/js/chart/constants.js` and `_sectionBounds()` in `GEXChart.js`.
 
 **Adding new UI controls**: Add HTML elements inside `<div id="header">` in `index.html`, style them in `css/styles.css`, and wire event listeners in `main.js`'s `init()` function.
 

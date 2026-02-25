@@ -8,6 +8,7 @@ export const COLORS = {
   callGex:      0x4caf50,
   putGex:       0xf44336,
   netGex:       0x00bcd4,
+  volume:       0x00bcd4,
   separator:    0x30363d,
 };
 
@@ -17,7 +18,7 @@ export const LAYOUT = {
   marginLeft: 8,
   priceAxisWidth: 60,
   gexSectionRatio: 0.22,
-  netGexSectionRatio: 0.13,
+  volumeSectionRatio: 0.13,
   candleGap: 0.3,
 };
 

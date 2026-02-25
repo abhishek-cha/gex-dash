@@ -1,3 +1,9 @@
+import { COLORS } from './constants.js';
+
+function hexCss(c) {
+  return '#' + c.toString(16).padStart(6, '0');
+}
+
 export function updateLabels(chart) {
   const overlay = document.getElementById('labels-overlay');
   overlay.innerHTML = '';
@@ -49,15 +55,15 @@ export function updateLabels(chart) {
   gexLabel.textContent = 'CALL / PUT GEX';
   overlay.appendChild(gexLabel);
 
-  const netLabel = document.createElement('div');
-  netLabel.className = 'section-label';
-  netLabel.style.left = s.netGex.left + 4 + 'px';
-  netLabel.textContent = 'NET GEX';
-  overlay.appendChild(netLabel);
+  const volLabel = document.createElement('div');
+  volLabel.className = 'section-label';
+  volLabel.style.left = s.volume.left + 4 + 'px';
+  volLabel.textContent = 'VOLUME';
+  overlay.appendChild(volLabel);
 
   if (chart.gexLevels.length > 0) {
     addGexScale(chart, overlay, s);
-    addNetGexScale(chart, overlay, s);
+    addVolumeScale(chart, overlay, s);
   }
 }
 
@@ -85,7 +91,7 @@ function addGexScale(chart, overlay, s) {
       const rl = document.createElement('div');
       rl.className = 'gex-scale-label';
       rl.style.left = rx + 'px';
-      rl.style.color = '#4caf50';
+      rl.style.color = hexCss(COLORS.callGex);
       rl.textContent = chart._fmtGex(v);
       overlay.appendChild(rl);
     }
@@ -95,35 +101,35 @@ function addGexScale(chart, overlay, s) {
       const ll = document.createElement('div');
       ll.className = 'gex-scale-label';
       ll.style.left = lx + 'px';
-      ll.style.color = '#f44336';
+      ll.style.color = hexCss(COLORS.putGex);
       ll.textContent = chart._fmtGex(v);
       overlay.appendChild(ll);
     }
   }
 }
 
-function addNetGexScale(chart, overlay, s) {
-  const maxNet = Math.max(...chart.gexLevels.map(l => Math.abs(l.netGex)), 1);
+function addVolumeScale(chart, overlay, s) {
+  const maxVol = Math.max(...chart.gexLevels.map(l => l.totalVolume), 1);
   const ticks = 2;
-  const scaleStep = chart._niceStep(maxNet, ticks);
-  const usableW = s.netGex.width * 0.9;
+  const scaleStep = chart._niceStep(maxVol, ticks);
+  const usableW = s.volume.width * 0.9;
 
   const zLbl = document.createElement('div');
   zLbl.className = 'gex-scale-label';
-  zLbl.style.left = s.netGex.left + 2 + 'px';
+  zLbl.style.left = s.volume.left + 2 + 'px';
   zLbl.style.transform = 'none';
   zLbl.textContent = '0';
   overlay.appendChild(zLbl);
 
-  for (let v = scaleStep; v <= maxNet * 1.05; v += scaleStep) {
-    const frac = v / maxNet;
+  for (let v = scaleStep; v <= maxVol * 1.05; v += scaleStep) {
+    const frac = v / maxVol;
     if (frac > 1.05) break;
-    const x = s.netGex.left + 2 + frac * usableW;
-    if (x < s.netGex.right - 10) {
+    const x = s.volume.left + 2 + frac * usableW;
+    if (x < s.volume.right - 10) {
       const lbl = document.createElement('div');
       lbl.className = 'gex-scale-label';
       lbl.style.left = x + 'px';
-      lbl.textContent = chart._fmtGex(v);
+      lbl.textContent = chart._fmtVol(v);
       overlay.appendChild(lbl);
     }
   }

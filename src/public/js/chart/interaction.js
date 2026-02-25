@@ -1,4 +1,8 @@
-import { LAYOUT } from './constants.js';
+import { COLORS, LAYOUT } from './constants.js';
+
+function hexCss(c) {
+  return '#' + c.toString(16).padStart(6, '0');
+}
 
 export function setupInteraction(chart) {
   const el = chart.container;
@@ -130,45 +134,21 @@ export function setupInteraction(chart) {
       chPrice.style.left = s.axis.left + 2 + 'px';
       chPrice.textContent = price.toFixed(price >= 1000 ? 0 : 2);
 
-      if (mx >= s.candle.left && mx <= s.candle.right) {
-        const visCount = chart.viewEndIdx - chart.viewStartIdx;
-        const idx = Math.floor(
-          chart.viewStartIdx + ((mx - s.candle.left) / s.candle.width) * visCount
-        );
-        const c = chart.priceData[idx];
-        if (c) {
-          tooltip.style.display = 'block';
-          tooltip.style.left = (mx + 12) + 'px';
-          tooltip.style.top = (my - 10) + 'px';
-          const d = c.date;
-          let html =
-            `<div>${d.toLocaleDateString()}</div>` +
-            `<div>O: ${c.open.toFixed(2)}&nbsp; H: ${c.high.toFixed(2)}</div>` +
-            `<div>L: ${c.low.toFixed(2)}&nbsp; C: ${c.close.toFixed(2)}</div>` +
-            `<div>Vol: ${(c.volume / 1e6).toFixed(1)}M</div>`;
-          const nearest = chart._nearestGexLevel(price);
-          if (nearest) {
-            html +=
-              `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px">Strike: ${nearest.strike}</div>` +
-              `<div style="color:#4caf50">Call GEX: ${chart._fmtGex(nearest.callGex)}</div>` +
-              `<div style="color:#f44336">Put GEX: ${chart._fmtGex(nearest.putGex)}</div>` +
-              `<div style="color:#00bcd4">Net GEX: ${chart._fmtGex(nearest.netGex)}</div>`;
-          }
-          tooltip.innerHTML = html;
-        }
-      } else if (mx >= s.gex.left && mx <= s.netGex.right) {
-        const nearest = chart._nearestGexLevel(price);
-        if (nearest) {
-          tooltip.style.display = 'block';
-          tooltip.style.left = (mx + 12) + 'px';
-          tooltip.style.top = (my - 10) + 'px';
-          tooltip.innerHTML =
-            `<div>Strike: ${nearest.strike}</div>` +
-            `<div style="color:#4caf50">Call GEX: ${chart._fmtGex(nearest.callGex)}</div>` +
-            `<div style="color:#f44336">Put GEX: ${chart._fmtGex(nearest.putGex)}</div>` +
-            `<div style="color:#00bcd4">Net GEX: ${chart._fmtGex(nearest.netGex)}</div>`;
-        }
+      const nearest = chart._nearestGexLevel(price);
+      if (nearest && mx >= s.candle.left && mx <= s.volume.right) {
+        chart.highlightStrike(nearest);
+        tooltip.style.display = 'block';
+        tooltip.style.left = s.gex.left + 8 + 'px';
+        tooltip.style.top = (my - 10) + 'px';
+        tooltip.innerHTML =
+          `<div>Strike: ${nearest.strike}</div>` +
+          `<div style="color:${hexCss(COLORS.callGex)}">Call GEX: ${chart._fmtGex(nearest.callGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.putGex)}">Put GEX: ${chart._fmtGex(nearest.putGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.netGex)}">Net GEX: ${chart._fmtGex(nearest.netGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.volume)}">Volume: ${chart._fmtVol(nearest.totalVolume)}</div>` +
+          `<div>OI: ${chart._fmtVol(nearest.totalOI)}</div>`;
       } else {
+        chart.clearHighlight();
         tooltip.style.display = 'none';
       }
     } else {
@@ -176,6 +156,7 @@ export function setupInteraction(chart) {
       chV.style.display = 'none';
       chPrice.style.display = 'none';
       tooltip.style.display = 'none';
+      chart.clearHighlight();
       if (!chart._axisDrag.active && !chart._chartDrag.active && !chart._xAxisDrag.active) el.style.cursor = '';
     }
   });
@@ -218,6 +199,7 @@ export function setupInteraction(chart) {
       chV.style.display = 'none';
       chPrice.style.display = 'none';
       tooltip.style.display = 'none';
+      chart.clearHighlight();
     }
   });
 

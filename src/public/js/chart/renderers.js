@@ -83,21 +83,22 @@ export function buildGEXBars(chart) {
   }
 }
 
-export function buildNetGEXBars(chart) {
+export function buildVolumeBars(chart) {
   const s = chart._sectionBounds();
   if (!chart.gexLevels.length) return;
 
-  const maxNet = Math.max(...chart.gexLevels.map(l => Math.abs(l.netGex)), 1);
+  const maxVol = Math.max(...chart.gexLevels.map(l => l.totalVolume), 1);
   const strikes = chart.gexLevels.map(l => l.strike).sort((a, b) => a - b);
 
   for (const level of chart.gexLevels) {
+    if (!level.totalVolume) continue;
     const py = chart._priceToY(level.strike);
     if (py < s.bottom || py > s.top) continue;
     const { y: barY, h: barH } = chart._gexBarBounds(level.strike, strikes);
 
-    const w = (Math.abs(level.netGex) / maxNet) * s.netGex.width * 0.9;
-    chart.groups.netGexBars.add(
-      chart._makePlane(s.netGex.left + 2, barY, w, barH, COLORS.netGex, 0.85)
+    const w = (level.totalVolume / maxVol) * s.volume.width * 0.9;
+    chart.groups.volumeBars.add(
+      chart._makePlane(s.volume.left + 2, barY, w, barH, COLORS.volume, 0.85)
     );
   }
 }
@@ -112,7 +113,7 @@ export function buildSeparators(chart) {
   );
   chart.groups.overlays.add(
     chart._makeLine(
-      [[s.netGex.left, 0], [s.netGex.left, chart.height]],
+      [[s.volume.left, 0], [s.volume.left, chart.height]],
       COLORS.separator, 0.6
     )
   );

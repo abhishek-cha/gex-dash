@@ -3,6 +3,8 @@ export interface GEXLevel {
   callGex: number;
   putGex: number;
   netGex: number;
+  totalVolume: number;
+  totalOI: number;
 }
 
 export function getExpirationDates(optionChain: any): string[] {
@@ -29,7 +31,16 @@ export function calculateGEX(
     return selectedExpirations.has(expKey.split(":")[0]);
   };
 
-  const gexMap = new Map<number, { callGex: number; putGex: number }>();
+  const gexMap = new Map<
+    number,
+    { callGex: number; putGex: number; totalVolume: number; totalOI: number }
+  >();
+
+  const ensureStrike = (strike: number) => {
+    if (!gexMap.has(strike))
+      gexMap.set(strike, { callGex: 0, putGex: 0, totalVolume: 0, totalOI: 0 });
+    return gexMap.get(strike)!;
+  };
 
   if (optionChain.callExpDateMap) {
     for (const expDate of Object.keys(optionChain.callExpDateMap)) {
@@ -41,10 +52,10 @@ export function calculateGEX(
           const gamma = Math.abs(contract.gamma || 0);
           const oi = contract.openInterest || 0;
           const gex = gamma * oi * 100 * spotPrice;
-
-          if (!gexMap.has(strike))
-            gexMap.set(strike, { callGex: 0, putGex: 0 });
-          gexMap.get(strike)!.callGex += gex;
+          const entry = ensureStrike(strike);
+          entry.callGex += gex;
+          entry.totalVolume += contract.totalVolume || 0;
+          entry.totalOI += oi;
         }
       }
     }
@@ -60,18 +71,25 @@ export function calculateGEX(
           const gamma = Math.abs(contract.gamma || 0);
           const oi = contract.openInterest || 0;
           const gex = gamma * oi * 100 * spotPrice * -1;
-
-          if (!gexMap.has(strike))
-            gexMap.set(strike, { callGex: 0, putGex: 0 });
-          gexMap.get(strike)!.putGex += gex;
+          const entry = ensureStrike(strike);
+          entry.putGex += gex;
+          entry.totalVolume += contract.totalVolume || 0;
+          entry.totalOI += oi;
         }
       }
     }
   }
 
   const levels: GEXLevel[] = [];
-  for (const [strike, { callGex, putGex }] of gexMap) {
-    levels.push({ strike, callGex, putGex, netGex: callGex + putGex });
+  for (const [strike, { callGex, putGex, totalVolume, totalOI }] of gexMap) {
+    levels.push({
+      strike,
+      callGex,
+      putGex,
+      netGex: callGex + putGex,
+      totalVolume,
+      totalOI,
+    });
   }
 
   levels.sort((a, b) => a.strike - b.strike);

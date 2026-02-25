@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { COLORS, LAYOUT } from './constants.js';
-import { buildGrid, buildCandles, buildGEXBars, buildNetGEXBars, buildSeparators, buildPriceLine } from './renderers.js';
+import { buildGrid, buildCandles, buildGEXBars, buildVolumeBars, buildSeparators, buildPriceLine } from './renderers.js';
 import { setupInteraction } from './interaction.js';
 import { updateLabels } from './labels.js';
 
@@ -27,10 +27,14 @@ export class GEXChart {
       grid: new THREE.Group(),
       candles: new THREE.Group(),
       gexBars: new THREE.Group(),
-      netGexBars: new THREE.Group(),
+      volumeBars: new THREE.Group(),
       overlays: new THREE.Group(),
     };
     for (const g of Object.values(this.groups)) this.scene.add(g);
+
+    this._highlightGroup = new THREE.Group();
+    this.scene.add(this._highlightGroup);
+    this._highlightedStrike = null;
 
     this.priceData = [];
     this.gexLevels = [];
@@ -50,7 +54,7 @@ export class GEXChart {
   _sectionBounds() {
     const w = this.width;
     const h = this.height;
-    const netW = w * LAYOUT.netGexSectionRatio;
+    const netW = w * LAYOUT.volumeSectionRatio;
     const gexW = w * LAYOUT.gexSectionRatio;
     const axisW = LAYOUT.priceAxisWidth;
     const candleW = w - gexW - netW - axisW - LAYOUT.marginLeft;
@@ -59,7 +63,7 @@ export class GEXChart {
       candle: { left: LAYOUT.marginLeft, right: LAYOUT.marginLeft + candleW, width: candleW },
       axis:   { left: LAYOUT.marginLeft + candleW, right: LAYOUT.marginLeft + candleW + axisW, width: axisW },
       gex:    { left: w - netW - gexW, right: w - netW, width: gexW },
-      netGex: { left: w - netW, right: w, width: netW },
+      volume: { left: w - netW, right: w, width: netW },
       top: h - LAYOUT.marginTop,
       bottom: LAYOUT.marginBottom,
       chartH: h - LAYOUT.marginTop - LAYOUT.marginBottom,
@@ -142,10 +146,12 @@ export class GEXChart {
         if (c.material) c.material.dispose();
       }
     }
+    this._highlightedStrike = null;
+    this._clearHighlightGroup();
     buildGrid(this);
     buildCandles(this);
     buildGEXBars(this);
-    buildNetGEXBars(this);
+    buildVolumeBars(this);
     buildSeparators(this);
     buildPriceLine(this);
     updateLabels(this);
@@ -233,6 +239,70 @@ export class GEXChart {
     if (abs >= 1e6) return sign + (abs / 1e6).toFixed(2) + 'M';
     if (abs >= 1e3) return sign + (abs / 1e3).toFixed(1) + 'K';
     return sign + abs.toFixed(0);
+  }
+
+  _fmtVol(val) {
+    if (val >= 1e6) return (val / 1e6).toFixed(2) + 'M';
+    if (val >= 1e3) return (val / 1e3).toFixed(1) + 'K';
+    return val.toFixed(0);
+  }
+
+  _clearHighlightGroup() {
+    while (this._highlightGroup.children.length) {
+      const c = this._highlightGroup.children[0];
+      this._highlightGroup.remove(c);
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+    }
+  }
+
+  highlightStrike(level) {
+    if (!level || this._highlightedStrike === level.strike) return;
+    this._highlightedStrike = level.strike;
+    this._clearHighlightGroup();
+
+    const s = this._sectionBounds();
+    const strikes = this.gexLevels.map(l => l.strike).sort((a, b) => a - b);
+    const py = this._priceToY(level.strike);
+    if (py < s.bottom || py > s.top) return;
+
+    const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes);
+    const glowPad = Math.max(2, barH * 0.3);
+    const glowY = barY - glowPad / 2;
+    const glowH = barH + glowPad;
+
+    const maxCallGex = Math.max(...this.gexLevels.map(l => Math.abs(l.callGex)), 1);
+    const maxPutGex = Math.max(...this.gexLevels.map(l => Math.abs(l.putGex)), 1);
+    const maxGex = Math.max(maxCallGex, maxPutGex);
+    const halfW = s.gex.width / 2;
+    const centerX = s.gex.left + halfW;
+
+    if (level.callGex > 0) {
+      const w = (level.callGex / maxGex) * halfW + glowPad;
+      this._highlightGroup.add(
+        this._makePlane(centerX, glowY, w, glowH, COLORS.callGex, 0.25)
+      );
+    }
+    if (level.putGex < 0) {
+      const w = (Math.abs(level.putGex) / maxGex) * halfW + glowPad;
+      this._highlightGroup.add(
+        this._makePlane(centerX - w, glowY, w, glowH, COLORS.putGex, 0.25)
+      );
+    }
+
+    if (level.totalVolume > 0) {
+      const maxVol = Math.max(...this.gexLevels.map(l => l.totalVolume), 1);
+      const w = (level.totalVolume / maxVol) * s.volume.width * 0.9 + glowPad;
+      this._highlightGroup.add(
+        this._makePlane(s.volume.left + 2 - glowPad / 2, glowY, w, glowH, COLORS.volume, 0.25)
+      );
+    }
+  }
+
+  clearHighlight() {
+    if (this._highlightedStrike === null) return;
+    this._highlightedStrike = null;
+    this._clearHighlightGroup();
   }
 
   _render() {
