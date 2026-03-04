@@ -87,7 +87,7 @@ The `/api/stream/:symbol` endpoint uses **Server-Sent Events** with a `types` qu
 - **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done { type: "price" }` + `event: done`.
 - **`types=gex,quote&expirations=...`** (custom filter): fetches option chains and quote in parallel with progressive GEX streaming, sends multiple `event: gex` chunks + `event: done { type: "gex" }`.
 
-The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint (lightweight, no option chain needed) and carries `{ price, change, percentChange }`. Each `gex` event includes `selectedExpirations` for that chunk so the client can union them additively. The client only renders once per type — after the corresponding `done { type }` event — avoiding partial paints during GEX accumulation.
+The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint (lightweight, no option chain needed) and carries `{ price, change, percentChange }`. Each `gex` event includes `selectedExpirations` for that chunk so the client can union them additively. The client renders carefully to avoid partial paints: `done { type: "price" }` rebuilds only the price chart when GEX is also streaming (GEX repositions on its own `done`), or does a full rebuild when GEX is already loaded (e.g. freq/range change). `done { type: "quote" }` only draws the spot price line. `done { type: "gex" }` rebuilds only the GEX section. On symbol change, both charts are cleared immediately before streaming begins.
 
 ### Chart
 
@@ -160,8 +160,8 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 
 The Expirations button in the header opens a multi-select dialog for filtering which option expiration dates are included in the GEX calculation:
 
-- **Default**: Expirations within 60 days are selected (computed per chunk on the server).
-- **All dates**: Available up to 2 years out, fetched via a single lightweight `/expirationchain` API call.
+- **Default**: Expirations within 60 days are selected (computed per chunk on the server, using US Eastern Time).
+- **All dates**: Available up to 2 years out (from today ET), fetched via a single lightweight `/expirationchain` API call.
 - Applying a custom filter re-fetches GEX progressively with only the selected expirations.
 
 ## Watchlist

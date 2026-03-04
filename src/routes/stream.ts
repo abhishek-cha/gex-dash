@@ -6,6 +6,7 @@ import {
   fetchOptionChainWindow,
   fetchPriceHistory,
   fetchQuote,
+  estToday,
 } from "../schwab.js";
 import { calculateGEX, getExpirationDates } from "../gex.js";
 
@@ -77,8 +78,8 @@ async function streamGEX(
     : undefined;
 
   // 60-day cutoff for default selection
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() + 60);
+  const cutoff = estToday();
+  cutoff.setUTCDate(cutoff.getUTCDate() + 60);
   const cutoffStr = cutoff.toISOString().slice(0, 10);
 
   // Only fetch windows that overlap with needed dates

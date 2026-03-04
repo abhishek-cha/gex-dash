@@ -1,4 +1,5 @@
 import { FREQ_MAP, RANGE_MAP } from './chart/constants.js';
+import { buildPriceLine } from './chart/renderers.js';
 
 export async function checkAuth() {
   const res = await fetch('/auth/status');
@@ -109,11 +110,14 @@ export function openStream(symbol, { types, chart, state, expirations }) {
       priceLoading.style.display = 'none';
       chart.loadPriceData(pendingPrice);
       pendingPrice = null;
-      chart.rebuildPrice();
+      // If GEX is also streaming, only rebuild price — GEX will
+      // reposition on its own done event using the updated scale.
+      // Otherwise rebuild everything so existing GEX bars match the new scale.
+      wantsGex ? chart.rebuildPrice() : chart.rebuild();
     } else if (data.type === 'quote' && pendingQuote) {
       applyQuote(pendingQuote, chart);
       pendingQuote = null;
-      chart.rebuildPrice();
+      buildPriceLine(chart);
     } else if (data.type === 'gex') {
       gexLoading.style.display = 'none';
       chart.rebuildGEX();

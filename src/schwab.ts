@@ -60,6 +60,12 @@ export async function hasValidToken(
 
 // --- Date windowing for option chains ---
 
+/** Today's date in US Eastern Time (options market timezone). */
+export function estToday(): Date {
+  const parts = new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }).split("-");
+  return new Date(Date.UTC(+parts[0], +parts[1] - 1, +parts[2]));
+}
+
 function dateStr(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -68,17 +74,17 @@ export function buildDateWindows(
   intervalDays = 21
 ): { fromDate: string; toDate: string }[] {
   const windows: { fromDate: string; toDate: string }[] = [];
-  const now = new Date();
-  const cap = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+  const now = estToday();
+  const cap = new Date(Date.UTC(now.getUTCFullYear() + 2, now.getUTCMonth(), now.getUTCDate()));
 
   let cursor = new Date(now);
   while (cursor < cap) {
     const end = new Date(cursor);
-    end.setDate(end.getDate() + intervalDays);
+    end.setUTCDate(end.getUTCDate() + intervalDays);
     const windowEnd = end > cap ? cap : end;
     windows.push({ fromDate: dateStr(cursor), toDate: dateStr(windowEnd) });
     cursor = new Date(windowEnd);
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return windows;
 }
@@ -138,8 +144,8 @@ export async function fetchExpirations(
     throw new Error(`Schwab expirationchain API returned ${resp.status}`);
   }
   const data = await resp.json();
-  const cap = new Date();
-  cap.setFullYear(cap.getFullYear() + 2);
+  const cap = estToday();
+  cap.setUTCFullYear(cap.getUTCFullYear() + 2);
   return (data.expirationList || []).filter(
     (e: any) => new Date(e.expirationDate) <= cap
   );

@@ -160,6 +160,12 @@ export class GEXChart {
     this.spotPrice = 0;
   }
 
+  clearPrice() {
+    this.priceData = [];
+    this.viewStartIdx = 0;
+    this.viewEndIdx = 0;
+  }
+
   _clearGroup(g) {
     while (g.children.length) {
       const c = g.children[0];

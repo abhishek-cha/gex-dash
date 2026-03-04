@@ -52,9 +52,10 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `/auth/login` -> Schwab OAuth -> `/auth/callback` -> exchanges code -> redirects to `/`.
 
 **Option chain fetching** (`src/schwab.ts`):
-- `buildDateWindows(intervalDays=21)`: generates rolling date windows spanning 2 years from today. Default is 21-day intervals.
+- `estToday()`: returns today's date in US Eastern Time (America/New_York) as a midnight-UTC `Date`. Used for all date windowing and caps to ensure consistency regardless of server timezone.
+- `buildDateWindows(intervalDays=21)`: generates rolling date windows spanning 2 years from today (ET). Default is 21-day intervals.
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
-- `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years.
+- `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years from today (ET).
 
 **Watchlist** (`src/routes/watchlist.ts`):
 - Simple REST API for managing a list of ticker symbols.
@@ -82,7 +83,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
 - Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
 - **Data setters never trigger renders.** All rendering is driven by explicit rebuild calls.
-- Key data methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `mergeGEXChunk(gexData)`.
+- Key data methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`, `mergeGEXChunk(gexData)`.
 - `mergeGEXChunk(gexData)`: accumulates GEX per strike by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI`. Used for progressive streaming — each chunk's GEX is added to the running total.
 - Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars), `rebuild()` (full rebuild, calls both).
 - `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
@@ -113,7 +114,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
   - `price` / `quote`: buffer data silently (no render).
   - `gex`: calls `chart.mergeGEXChunk()` to accumulate per-chunk GEX. Unions `selectedExpirations` into state.
   - `expirations`: updates `state.allExpirations`.
-  - `done { type }`: triggers targeted renders — `rebuildPrice()` for price/quote, `rebuildGEX()` for gex.
+  - `done { type: "price" }`: if GEX is also streaming, `rebuildPrice()` only (avoids partial GEX render); otherwise `rebuild()` to reposition existing GEX bars on the new price scale.
+  - `done { type: "quote" }`: `applyQuote()` updates header + `setSpotPrice()`, then `buildPriceLine()` draws the spot line.
+  - `done { type: "gex" }`: `rebuildGEX()` — uses the current price scale.
   - `done {}` (no type): final signal, closes the EventSource.
   - `error`: hides loading indicators, closes stream.
 - `applyQuote(quoteData, chart)`: updates the header price/change display and calls `chart.setSpotPrice()`.
@@ -157,7 +160,7 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Changing GEX formula**: Modify `calculateGEX()` in `src/gex.ts`. The function receives the raw Schwab option chain object.
 
-**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `21`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`.
+**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `21`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`. All date logic uses `estToday()` (US Eastern Time) to match options market conventions.
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
