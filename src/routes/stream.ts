@@ -2,7 +2,6 @@ import type { Express, Request, Response } from "express";
 import type { EnhancedTokenManager } from "@sudowealth/schwab-api";
 import {
   buildDateWindows,
-  fetchOptionChainAll,
   fetchOptionChainWindow,
   fetchPriceHistory,
   fetchQuote,
@@ -52,6 +51,43 @@ async function streamQuote(
   }
 }
 
+async function streamExpirations(
+  res: Response,
+  symbol: string,
+  accessToken: string,
+  aborted: () => boolean
+) {
+  const windows = buildDateWindows();
+  const allExpDates = new Set<string>();
+
+  const fetches = windows.map((p, i) =>
+    fetchOptionChainWindow(symbol, accessToken, p.fromDate, p.toDate).then(
+      (chunk) => ({ idx: i, chunk })
+    )
+  );
+  const remaining = [...fetches];
+
+  while (remaining.length > 0) {
+    const resolved = await Promise.race(remaining);
+    if (aborted()) return;
+
+    remaining.splice(remaining.indexOf(fetches[resolved.idx]), 1);
+
+    const { chunk } = resolved;
+    if (!chunk) continue;
+
+    const chunkExpDates = getExpirationDates(chunk);
+    const hadNew = chunkExpDates.some((d) => !allExpDates.has(d));
+    for (const d of chunkExpDates) allExpDates.add(d);
+
+    if (hadNew) {
+      sendEvent(res, "expirations", {
+        expirationDates: [...allExpDates].sort(),
+      });
+    }
+  }
+}
+
 async function streamGEX(
   res: Response,
   symbol: string,
@@ -59,74 +95,50 @@ async function streamGEX(
   expirations: string | undefined,
   aborted: () => boolean
 ) {
-  if (expirations) {
-    const selectedExpirations = new Set(expirations.split(","));
-    const optionChain = await fetchOptionChainAll(symbol, accessToken);
-    if (aborted()) return;
-    const expirationDates = getExpirationDates(optionChain);
-    const gexLevels = calculateGEX(optionChain, selectedExpirations);
-    sendEvent(res, "expirations", { expirationDates });
-    sendEvent(res, "gex", {
-      gexLevels,
-      selectedExpirations: [...selectedExpirations],
-    });
-    return;
-  }
+  const selectedFilter = expirations
+    ? new Set(expirations.split(","))
+    : undefined;
 
-  const windows = buildDateWindows();
-  const allExpDates = new Set<string>();
+  // 60-day cutoff for default selection
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() + 60);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
 
-  const fetches = windows.map((w) =>
-    fetchOptionChainWindow(symbol, accessToken, w.fromDate, w.toDate)
+  // Only fetch windows that overlap with needed dates
+  const allWindows = buildDateWindows();
+  const windows = selectedFilter
+    ? allWindows.filter((w) =>
+        [...selectedFilter].some((d) => d >= w.fromDate && d <= w.toDate)
+      )
+    : allWindows.filter((w) => w.fromDate <= cutoffStr);
+
+  const fetches = windows.map((p, i) =>
+    fetchOptionChainWindow(symbol, accessToken, p.fromDate, p.toDate).then(
+      (chunk) => ({ idx: i, chunk })
+    )
   );
-
-  const firstChunk = await fetches[0];
-  if (aborted()) return;
-
-  if (firstChunk) {
-    const chunkExpDates = getExpirationDates(firstChunk);
-    for (const d of chunkExpDates) allExpDates.add(d);
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() + 60);
-    const cutoffStr = cutoff.toISOString().slice(0, 10);
-    const within60 = chunkExpDates.filter((d) => d <= cutoffStr);
-    const selected = within60.length > 0 ? new Set(within60) : undefined;
-    const gexLevels = calculateGEX(firstChunk, selected);
-    sendEvent(res, "expirations", {
-      expirationDates: [...allExpDates].sort(),
-    });
-    sendEvent(res, "gex", {
-      gexLevels,
-      selectedExpirations: selected ? [...selected] : [...allExpDates].sort(),
-    });
-  }
-
-  const rest = fetches
-    .slice(1)
-    .map((p, i) => p.then((chunk) => ({ idx: i + 1, chunk })));
-  const remaining = [...rest];
+  const remaining = [...fetches];
 
   while (remaining.length > 0) {
     const resolved = await Promise.race(remaining);
     if (aborted()) return;
 
-    remaining.splice(
-      remaining.findIndex((p) => p === rest[resolved.idx - 1]),
-      1
-    );
+    remaining.splice(remaining.indexOf(fetches[resolved.idx]), 1);
 
     const { chunk } = resolved;
     if (!chunk) continue;
 
     const chunkExpDates = getExpirationDates(chunk);
-    const newExpDates = chunkExpDates.filter((d) => !allExpDates.has(d));
-    for (const d of newExpDates) allExpDates.add(d);
 
-    if (newExpDates.length > 0) {
-      sendEvent(res, "expirations", {
-        expirationDates: [...allExpDates].sort(),
-      });
+    // Filter: explicit filter or 60-day default
+    const chunkFilter = selectedFilter
+      ?? new Set(chunkExpDates.filter((d) => d <= cutoffStr));
+
+    const gexLevels = calculateGEX(chunk, chunkFilter);
+    const chunkSelected = chunkExpDates.filter((d) => chunkFilter.has(d));
+
+    if (gexLevels.length > 0) {
+      sendEvent(res, "gex", { gexLevels, selectedExpirations: chunkSelected });
     }
   }
 }
@@ -167,30 +179,46 @@ export function registerStreamRoutes(
 
       if (types.has("price")) {
         tasks.push(
-          streamPrice(req, res, symbol, accessToken, aborted).catch((err) => {
-            console.error("Price stream error:", err?.message || err);
-            if (!aborted()) sendEvent(res, "error", { type: "price", error: "Failed to fetch price data" });
-          })
+          streamPrice(req, res, symbol, accessToken, aborted)
+            .then(() => { if (!aborted()) sendEvent(res, "done", { type: "price" }); })
+            .catch((err) => {
+              console.error("Price stream error:", err?.message || err);
+              if (!aborted()) sendEvent(res, "error", { type: "price", error: "Failed to fetch price data" });
+            })
         );
       }
 
       if (types.has("quote")) {
         tasks.push(
-          streamQuote(res, symbol, accessToken, aborted).catch((err) => {
-            console.error("Quote stream error:", err?.message || err);
-            if (!aborted()) sendEvent(res, "error", { type: "quote", error: "Failed to fetch quote" });
-          })
+          streamQuote(res, symbol, accessToken, aborted)
+            .then(() => { if (!aborted()) sendEvent(res, "done", { type: "quote" }); })
+            .catch((err) => {
+              console.error("Quote stream error:", err?.message || err);
+              if (!aborted()) sendEvent(res, "error", { type: "quote", error: "Failed to fetch quote" });
+            })
         );
       }
 
       if (types.has("gex")) {
         tasks.push(
-          streamGEX(res, symbol, accessToken, expirations, aborted).catch(
+          streamGEX(res, symbol, accessToken, expirations, aborted)
+            .then(() => { if (!aborted()) sendEvent(res, "done", { type: "gex" }); })
+            .catch(
             (err) => {
               console.error("GEX stream error:", err?.message || err);
               if (!aborted()) sendEvent(res, "error", { type: "gex", error: "Failed to fetch GEX data" });
-            }
-          )
+            })
+        );
+      }
+
+      if (types.has("expiration")) {
+        tasks.push(
+          streamExpirations(res, symbol, accessToken, aborted)
+            .then(() => { if (!aborted()) sendEvent(res, "done", { type: "expiration" }); })
+            .catch((err) => {
+              console.error("Expiration stream error:", err?.message || err);
+              if (!aborted()) sendEvent(res, "error", { type: "expiration", error: "Failed to fetch expirations" });
+            })
         );
       }
 

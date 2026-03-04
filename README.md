@@ -44,22 +44,27 @@ sequenceDiagram
     Server->>Schwab: Exchange code for tokens
     Server-->>Browser: Redirect to /
 
-    Browser->>Server: GET /api/stream/:symbol?types=price,gex,quote (SSE)
-    Note over Server: Fires price, quote, + 8 option chain requests in parallel
+    Browser->>Server: GET /api/stream/:symbol?types=price,gex,quote,expiration (SSE)
+    Note over Server: GEX: ~3 windows (60-day default). Expirations: ~35 windows (full 2yr).
     Server->>Schwab: Quote API
     Server->>Schwab: Price history API
-    Server->>Schwab: Option chain windows 1-8 (3-month intervals, 2yr cap)
+    Server->>Schwab: GEX option chain windows (~3, covering 60 days)
+    Server->>Schwab: Expiration option chain windows (~35, covering 2yr)
     Schwab-->>Server: Quote data
     Server-->>Browser: event: quote
+    Server-->>Browser: event: done {type: "quote"}
     Schwab-->>Server: Price data
     Server-->>Browser: event: price
-    Schwab-->>Server: Window 1 result
-    Server-->>Browser: event: expirations
-    Server-->>Browser: event: gex (60-day default filter)
-    Note over Browser: Chart renders immediately
-    Schwab-->>Server: Window 2..8 results (as they arrive)
-    Server-->>Browser: event: expirations (updated dates)
-    Server-->>Browser: event: done
+    Server-->>Browser: event: done {type: "price"}
+    Note over Browser: Price chart renders
+    Schwab-->>Server: GEX window results
+    Server-->>Browser: event: gex (per chunk, accumulated on client)
+    Server-->>Browser: event: done {type: "gex"}
+    Note over Browser: GEX chart renders (single paint after all chunks)
+    Schwab-->>Server: Expiration window results (as they arrive)
+    Server-->>Browser: event: expirations (progressively updated)
+    Server-->>Browser: event: done {type: "expiration"}
+    Server-->>Browser: event: done (all complete)
 ```
 
 ### GEX Calculation
@@ -78,11 +83,11 @@ GEX is aggregated per strike price across all selected expiration dates. Total o
 
 The `/api/stream/:symbol` endpoint uses **Server-Sent Events** with a `types` query param to control what data is streamed:
 
-- **`types=price,gex,quote`** (initial symbol load): price history, quote, and all option chain windows are fetched in parallel. Events are sent as data resolves: `event: price` for candles, `event: quote` for current price/change, `event: expirations` for available dates, `event: gex` for GEX levels (60-day default filter), then `event: done`.
-- **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done`.
-- **`types=gex,quote&expirations=...`** (custom filter): fetches option chains and quote in parallel, sends `event: quote` + `event: expirations` + `event: gex` + `event: done`.
+- **`types=price,gex,quote,expiration`** (initial symbol load): GEX only fetches ~3 windows (60-day default), while `expiration` fetches all ~35 windows to discover available dates. GEX is streamed **progressively** — each chunk's GEX is sent as it resolves, accumulated per strike on the client (GEX is additive). Per-type `done` events fire as each type completes; a final `done` (no type) signals stream end.
+- **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done { type: "price" }` + `event: done`.
+- **`types=gex,quote&expirations=...`** (custom filter): fetches option chains and quote in parallel with progressive GEX streaming, sends multiple `event: gex` chunks + `event: done { type: "gex" }`.
 
-The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint (lightweight, no option chain needed) and carries `{ price, change, percentChange }`. The `gex` event includes `selectedExpirations` so the client knows exactly which dates were used in the calculation.
+The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint (lightweight, no option chain needed) and carries `{ price, change, percentChange }`. Each `gex` event includes `selectedExpirations` for that chunk so the client can union them additively. The client only renders once per type — after the corresponding `done { type }` event — avoiding partial paints during GEX accumulation.
 
 ### Chart
 
@@ -155,9 +160,9 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 
 The Expirations button in the header opens a multi-select dialog for filtering which option expiration dates are included in the GEX calculation:
 
-- **Default**: Expirations within 60 days are selected.
-- **All dates**: Available up to 2 years out, streamed progressively as Schwab windows resolve.
-- Applying a custom filter re-fetches GEX with only the selected expirations.
+- **Default**: Expirations within 60 days are selected (computed per chunk on the server).
+- **All dates**: Available up to 2 years out, streamed progressively as 21-day option chain windows resolve.
+- Applying a custom filter re-fetches GEX progressively with only the selected expirations.
 
 ## Watchlist
 

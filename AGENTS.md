@@ -52,9 +52,8 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `/auth/login` -> Schwab OAuth -> `/auth/callback` -> exchanges code -> redirects to `/`.
 
 **Option chain fetching** (`src/schwab.ts`):
-- `buildDateWindows()`: generates 3-month date windows spanning 2 years from today.
+- `buildDateWindows(intervalDays=21)`: generates rolling date windows spanning 2 years from today. Default is 21-day intervals.
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
-- `fetchOptionChainAll()`: parallel fetch + merge of all windows (used for the filtered/non-streaming path).
 
 **Watchlist** (`src/routes/watchlist.ts`):
 - Simple REST API for managing a list of ticker symbols.
@@ -65,12 +64,15 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 **Stream endpoint** (`src/routes/stream.ts` - `GET /api/stream/:symbol`):
 - Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
-  - `price`: fetches Schwab `/pricehistory`, sends `event: price`. Accepts `frequencyType`, `frequency`, `periodType`, `period` query params.
-  - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`.
-  - `gex`: fetches option chain windows, sends `event: gex` (first window, 60-day default filter) then `event: expirations` (subsequent windows). If `expirations` query param is provided, fetches all windows, merges, calculates GEX with the filter, sends a single `event: gex`.
-- All requests end with `event: done`. Price and GEX fetches run concurrently when both types are requested.
+  - `price`: fetches Schwab `/pricehistory`, sends `event: price`, then `event: done { type: "price" }`.
+  - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`, then `event: done { type: "quote" }`.
+  - `gex`: **progressive streaming** — only fetches the 21-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
+  - `expiration`: fetches all ~35 windows (full 2-year range) to discover all available expiration dates. Sends `event: expirations` progressively as windows resolve. Ends with `event: done { type: "expiration" }`. Separated from `gex` so GEX only fetches the windows it needs.
+- Per-type `done` events (`done: { type: "price" | "quote" | "gex" | "expiration" }`) fire as each type completes. A final `done: {}` (no type) signals all types are finished.
+- **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~3 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
+- Default expiration filter: 60-day cutoff applied per chunk. If `expirations` query param is provided, that explicit filter is used instead.
 - Usage scenarios:
-  - Initial symbol load: `?types=price,gex,quote`
+  - Initial symbol load: `?types=price,gex,quote,expiration`
   - Freq/range change: `?types=price`
   - Expiration filter apply: `?types=gex,quote&expirations=date1,date2,...`
 
@@ -78,7 +80,10 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 **`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
 - Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
-- Key methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `rebuild()`, `highlightStrike(level)`, `clearHighlight()`.
+- **Data setters never trigger renders.** All rendering is driven by explicit rebuild calls.
+- Key data methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `mergeGEXChunk(gexData)`.
+- `mergeGEXChunk(gexData)`: accumulates GEX per strike by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI`. Used for progressive streaming — each chunk's GEX is added to the running total.
+- Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars), `rebuild()` (full rebuild, calls both).
 - `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
 - Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
 
@@ -103,7 +108,13 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `state.activeStream`: current `EventSource` instance (closed before opening a new one).
 
 **API layer** (`src/public/js/api.js`):
-- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Attaches typed event listeners (`price`, `quote`, `gex`, `expirations`, `done`, `error`). Returns the `EventSource` so the caller can close it on abort.
+- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Uses epoch-based stale detection (`_activeStreamId`) to discard events from superseded streams. Clears GEX data when a new stream requests GEX. Attaches typed event listeners:
+  - `price` / `quote`: buffer data silently (no render).
+  - `gex`: calls `chart.mergeGEXChunk()` to accumulate per-chunk GEX. Unions `selectedExpirations` into state.
+  - `expirations`: updates `state.allExpirations`.
+  - `done { type }`: triggers targeted renders — `rebuildPrice()` for price/quote, `rebuildGEX()` for gex.
+  - `done {}` (no type): final signal, closes the EventSource.
+  - `error`: hides loading indicators, closes stream.
 - `applyQuote(quoteData, chart)`: updates the header price/change display and calls `chart.setSpotPrice()`.
 - `checkAuth()`: checks `/auth/status`.
 
@@ -128,8 +139,9 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 ## Important Patterns
 
 - **No frontend build step**: frontend uses native ES module `.js` files. Three.js is loaded via CDN import map in `index.html`.
-- **SSE streaming**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). The `quote` event is fetched via Schwab's dedicated `/quotes` endpoint — lightweight and independent of the option chain. The client uses native `EventSource` API. The `types` query param controls which data types are fetched and streamed. Price and GEX fetches run concurrently when both are requested.
-- **Expiration filter default**: the server (`src/routes/stream.ts`) computes the 60-day cutoff for the default expiration selection and returns `selectedExpirations` in the `gex` event payload. The client sets its state directly from the server response — no duplicated logic.
+- **SSE streaming with progressive GEX**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). GEX is streamed progressively — option chains are fetched in 21-day windows, and each chunk's GEX is sent as it resolves. The client accumulates GEX per strike (GEX is summable: `|gamma| * OI * 100 * spot`). Per-type `done` events (`done: { type }`) signal when each data type is complete, enabling targeted renders. The final `done: {}` (no type) closes the stream.
+- **Separation of data and rendering**: `GEXChart` data setters (`loadPriceData`, `setSpotPrice`, `mergeGEXChunk`, `clearGEX`) never trigger renders. Only `done` event handlers call `rebuildPrice()` or `rebuildGEX()`, preventing partial renders during GEX accumulation.
+- **Expiration filter default**: the server computes a 60-day cutoff per chunk and returns `selectedExpirations` in each `gex` event payload. The client unions these additively — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
 - **Watchlist persistence**: symbols are stored in `watchlist.json` (gitignored) via simple REST endpoints in `src/routes/watchlist.ts`. The frontend dialog (`watchlistDialog.js`) manages add/remove/select.
@@ -144,10 +156,10 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Changing GEX formula**: Modify `calculateGEX()` in `src/gex.ts`. The function receives the raw Schwab option chain object.
 
-**Adjusting the date window size or cap**: Change the `3` (months) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`.
+**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `21`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`.
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
-**Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from `rebuild()` in `GEXChart.js`.
+**Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from the appropriate rebuild method (`rebuildPrice()`, `rebuildGEX()`, or `rebuild()`) in `GEXChart.js`.
 
 **Volume alert dot**: In `renderers.js`, `buildVolumeBars()` renders a small orange circle (`COLORS.volumeAlert`) beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.

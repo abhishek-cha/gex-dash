@@ -105,8 +105,6 @@ export class GEXChart {
       this.viewEndIdx = this.priceData.length;
       this._autoFitY();
     }
-
-    this.rebuild();
   }
 
   _autoFitY() {
@@ -127,29 +125,76 @@ export class GEXChart {
 
   loadGEXData(gexData) {
     this.gexLevels = gexData.gexLevels || [];
-    this.rebuild();
+  }
+
+  /** Accumulate a chunk of GEX levels by summing per strike. Does not repaint. */
+  mergeGEXChunk(gexData) {
+    const incoming = gexData.gexLevels || [];
+    if (this.gexLevels.length === 0) {
+      this.gexLevels = incoming;
+      return;
+    }
+    const map = new Map();
+    for (const l of this.gexLevels) map.set(l.strike, { ...l });
+    for (const l of incoming) {
+      const existing = map.get(l.strike);
+      if (existing) {
+        existing.callGex += l.callGex;
+        existing.putGex += l.putGex;
+        existing.netGex += l.netGex;
+        existing.totalVolume += l.totalVolume;
+        existing.totalOI += l.totalOI;
+      } else {
+        map.set(l.strike, { ...l });
+      }
+    }
+    this.gexLevels = [...map.values()].sort((a, b) => a.strike - b.strike);
   }
 
   setSpotPrice(price) {
     this.spotPrice = price || 0;
-    this.rebuild();
   }
 
   clearGEX() {
     this.gexLevels = [];
     this.spotPrice = 0;
-    this.rebuild();
+  }
+
+  _clearGroup(g) {
+    while (g.children.length) {
+      const c = g.children[0];
+      g.remove(c);
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+    }
+  }
+
+  rebuildPrice() {
+    this._clearGroup(this.groups.grid);
+    this._clearGroup(this.groups.candles);
+    this._clearGroup(this.groups.overlays);
+    buildGrid(this);
+    buildCandles(this);
+    buildSeparators(this);
+    buildPriceLine(this);
+    updateLabels(this);
+    this._render();
+  }
+
+  rebuildGEX() {
+    this._clearGroup(this.groups.gexBars);
+    this._clearGroup(this.groups.volumeBars);
+    this._highlightedStrike = null;
+    this._clearHighlightGroup();
+    buildGEXBars(this);
+    buildVolumeBars(this);
+    buildPriceLine(this);
+    updateLabels(this);
+    this._render();
   }
 
   rebuild() {
-    for (const g of Object.values(this.groups)) {
-      while (g.children.length) {
-        const c = g.children[0];
-        g.remove(c);
-        if (c.geometry) c.geometry.dispose();
-        if (c.material) c.material.dispose();
-      }
-    }
+    for (const g of Object.values(this.groups)) this._clearGroup(g);
     this._highlightedStrike = null;
     this._clearHighlightGroup();
     buildGrid(this);

@@ -58,10 +58,9 @@ function loadSymbol(symbol) {
   document.getElementById('hdr-price').textContent = '--';
   document.getElementById('hdr-change').textContent = '--';
   document.getElementById('hdr-change').className = 'change';
-  c.clearGEX();
 
   state.activeStream = openStream(symbol, {
-    types: ['price', 'gex', 'quote'],
+    types: ['price', 'gex', 'quote', 'expiration'],
     chart: c,
     state,
   });

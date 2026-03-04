@@ -48,7 +48,12 @@ export function applyQuote(quoteData, chart) {
  * }} opts
  * @returns {EventSource}
  */
+let _activeStreamId = 0;
+
 export function openStream(symbol, { types, chart, state, expirations }) {
+  const streamId = _activeStreamId = Date.now();
+  const stale = () => streamId !== _activeStreamId;
+
   const qs = new URLSearchParams({ types: types.join(','), ...getPriceParams() });
   if (expirations && expirations.size > 0) {
     qs.set('expirations', [...expirations].join(','));
@@ -60,46 +65,70 @@ export function openStream(symbol, { types, chart, state, expirations }) {
   const wantsGex = types.includes('gex');
 
   if (wantsPrice) priceLoading.style.display = 'block';
-  if (wantsGex) gexLoading.style.display = 'block';
+  if (wantsGex) {
+    gexLoading.style.display = 'block';
+    chart.clearGEX();
+  }
 
   const es = new EventSource(`/api/stream/${encodeURIComponent(symbol)}?${qs}`);
 
+  let pendingPrice = null;
+  let pendingQuote = null;
+
   es.addEventListener('price', (e) => {
-    priceLoading.style.display = 'none';
-    const priceData = JSON.parse(e.data);
-    chart.loadPriceData(priceData);
+    if (stale()) return;
+    pendingPrice = JSON.parse(e.data);
   });
 
   es.addEventListener('quote', (e) => {
-    const quoteData = JSON.parse(e.data);
-    applyQuote(quoteData, chart);
+    if (stale()) return;
+    pendingQuote = JSON.parse(e.data);
   });
 
   es.addEventListener('gex', (e) => {
-    gexLoading.style.display = 'none';
+    if (stale()) return;
     const gexData = JSON.parse(e.data);
-    chart.loadGEXData(gexData);
+    chart.mergeGEXChunk(gexData);
     if (gexData.selectedExpirations) {
-      state.selectedExpirations = new Set(gexData.selectedExpirations);
-      state.updateFilterButton();
+      for (const d of gexData.selectedExpirations) state.selectedExpirations.add(d);
     }
   });
 
   es.addEventListener('expirations', (e) => {
+    if (stale()) return;
     const data = JSON.parse(e.data);
     if (data.expirationDates) {
       state.allExpirations = data.expirationDates;
-      state.updateFilterButton();
     }
   });
 
-  es.addEventListener('done', () => {
-    priceLoading.style.display = 'none';
-    gexLoading.style.display = 'none';
-    es.close();
+  es.addEventListener('done', (e) => {
+    if (stale()) return;
+    const data = JSON.parse(e.data);
+    if (data.type === 'price' && pendingPrice) {
+      priceLoading.style.display = 'none';
+      chart.loadPriceData(pendingPrice);
+      pendingPrice = null;
+      chart.rebuildPrice();
+    } else if (data.type === 'quote' && pendingQuote) {
+      applyQuote(pendingQuote, chart);
+      pendingQuote = null;
+      chart.rebuildPrice();
+    } else if (data.type === 'gex') {
+      gexLoading.style.display = 'none';
+      chart.rebuildGEX();
+      state.updateFilterButton();
+    } else if (data.type === 'expiration') {
+      state.updateFilterButton();
+    } else if (!data.type) {
+      priceLoading.style.display = 'none';
+      gexLoading.style.display = 'none';
+      es.close();
+    }
   });
 
   es.addEventListener('error', () => {
+    if (stale()) return;
     priceLoading.style.display = 'none';
     gexLoading.style.display = 'none';
     es.close();
