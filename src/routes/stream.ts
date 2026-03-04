@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import type { EnhancedTokenManager } from "@sudowealth/schwab-api";
 import {
   buildDateWindows,
+  fetchExpirations,
   fetchOptionChainWindow,
   fetchPriceHistory,
   fetchQuote,
@@ -46,7 +47,7 @@ async function streamQuote(
     sendEvent(res, "quote", {
       price: quote.lastPrice ?? quote.mark ?? 0,
       change: quote.netChange ?? 0,
-      percentChange: quote.netPercentChangeInDouble ?? 0,
+      percentChange: quote.netPercentChange ?? 0,
     });
   }
 }
@@ -57,35 +58,11 @@ async function streamExpirations(
   accessToken: string,
   aborted: () => boolean
 ) {
-  const windows = buildDateWindows();
-  const allExpDates = new Set<string>();
+  const list = await fetchExpirations(symbol, accessToken);
+  if (aborted()) return;
 
-  const fetches = windows.map((p, i) =>
-    fetchOptionChainWindow(symbol, accessToken, p.fromDate, p.toDate).then(
-      (chunk) => ({ idx: i, chunk })
-    )
-  );
-  const remaining = [...fetches];
-
-  while (remaining.length > 0) {
-    const resolved = await Promise.race(remaining);
-    if (aborted()) return;
-
-    remaining.splice(remaining.indexOf(fetches[resolved.idx]), 1);
-
-    const { chunk } = resolved;
-    if (!chunk) continue;
-
-    const chunkExpDates = getExpirationDates(chunk);
-    const hadNew = chunkExpDates.some((d) => !allExpDates.has(d));
-    for (const d of chunkExpDates) allExpDates.add(d);
-
-    if (hadNew) {
-      sendEvent(res, "expirations", {
-        expirationDates: [...allExpDates].sort(),
-      });
-    }
-  }
+  const expirationDates = list.map((e) => e.expirationDate).sort();
+  sendEvent(res, "expirations", { expirationDates });
 }
 
 async function streamGEX(

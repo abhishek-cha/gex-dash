@@ -54,6 +54,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **Option chain fetching** (`src/schwab.ts`):
 - `buildDateWindows(intervalDays=21)`: generates rolling date windows spanning 2 years from today. Default is 21-day intervals.
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
+- `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years.
 
 **Watchlist** (`src/routes/watchlist.ts`):
 - Simple REST API for managing a list of ticker symbols.
@@ -67,7 +68,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
   - `price`: fetches Schwab `/pricehistory`, sends `event: price`, then `event: done { type: "price" }`.
   - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`, then `event: done { type: "quote" }`.
   - `gex`: **progressive streaming** — only fetches the 21-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
-  - `expiration`: fetches all ~35 windows (full 2-year range) to discover all available expiration dates. Sends `event: expirations` progressively as windows resolve. Ends with `event: done { type: "expiration" }`. Separated from `gex` so GEX only fetches the windows it needs.
+  - `expiration`: single lightweight call to Schwab's `/expirationchain` endpoint (no option chain fetching). Returns all available expiration dates (capped to 2 years) in one `event: expirations`. Ends with `event: done { type: "expiration" }`.
 - Per-type `done` events (`done: { type: "price" | "quote" | "gex" | "expiration" }`) fire as each type completes. A final `done: {}` (no type) signals all types are finished.
 - **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~3 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
 - Default expiration filter: 60-day cutoff applied per chunk. If `expirations` query param is provided, that explicit filter is used instead.

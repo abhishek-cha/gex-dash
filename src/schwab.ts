@@ -126,6 +126,25 @@ export async function fetchQuote(
   return data[symbol]?.quote || data[symbol] || {};
 }
 
+export async function fetchExpirations(
+  symbol: string,
+  accessToken: string
+): Promise<{ expirationDate: string; daysToExpiration: number; expirationType: string; standard: boolean }[]> {
+  const params = new URLSearchParams({ symbol });
+  const resp = await fetch(`${SCHWAB_API_BASE}/expirationchain?${params}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!resp.ok) {
+    throw new Error(`Schwab expirationchain API returned ${resp.status}`);
+  }
+  const data = await resp.json();
+  const cap = new Date();
+  cap.setFullYear(cap.getFullYear() + 2);
+  return (data.expirationList || []).filter(
+    (e: any) => new Date(e.expirationDate) <= cap
+  );
+}
+
 export async function fetchPriceHistory(
   symbol: string,
   accessToken: string,
