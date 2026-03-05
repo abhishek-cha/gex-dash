@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { COLORS, LAYOUT } from './constants.js';
-import { buildGrid, buildCandles, buildGEXBars, buildVolumeBars, buildSeparators, buildPriceLine } from './renderers.js';
+import { buildGrid, buildCandles, buildGEXBars, buildVolumeBars, buildSeparators, buildPriceLine, buildDealerLevels } from './renderers.js';
 import { setupInteraction } from './interaction.js';
 import { updateLabels } from './labels.js';
 
@@ -28,6 +28,7 @@ export class GEXChart {
       candles: new THREE.Group(),
       gexBars: new THREE.Group(),
       volumeBars: new THREE.Group(),
+      dealerLevels: new THREE.Group(),
       overlays: new THREE.Group(),
     };
     for (const g of Object.values(this.groups)) this.scene.add(g);
@@ -37,7 +38,8 @@ export class GEXChart {
     this._highlightedStrike = null;
 
     this.priceData = [];
-    this.gexLevels = [];
+    this.gexLevels = [];      // hot — painted by renderers
+    this._coldGexLevels = []; // cold — accumulates during streaming
     this.spotPrice = 0;
 
     this.viewPriceMin = 0;
@@ -123,19 +125,15 @@ export class GEXChart {
     this.viewPriceMax = hi + pad;
   }
 
-  loadGEXData(gexData) {
-    this.gexLevels = gexData.gexLevels || [];
-  }
-
-  /** Accumulate a chunk of GEX levels by summing per strike. Does not repaint. */
+  /** Accumulate a chunk of GEX levels into the cold buffer. Does not repaint. */
   mergeGEXChunk(gexData) {
     const incoming = gexData.gexLevels || [];
-    if (this.gexLevels.length === 0) {
-      this.gexLevels = incoming;
+    if (this._coldGexLevels.length === 0) {
+      this._coldGexLevels = incoming;
       return;
     }
     const map = new Map();
-    for (const l of this.gexLevels) map.set(l.strike, { ...l });
+    for (const l of this._coldGexLevels) map.set(l.strike, { ...l });
     for (const l of incoming) {
       const existing = map.get(l.strike);
       if (existing) {
@@ -148,7 +146,13 @@ export class GEXChart {
         map.set(l.strike, { ...l });
       }
     }
-    this.gexLevels = [...map.values()].sort((a, b) => a.strike - b.strike);
+    this._coldGexLevels = [...map.values()].sort((a, b) => a.strike - b.strike);
+  }
+
+  /** Promote cold buffer to hot. Call before rebuildGEX(). */
+  commitGEX() {
+    this.gexLevels = this._coldGexLevels;
+    this._coldGexLevels = [];
   }
 
   setSpotPrice(price) {
@@ -157,6 +161,7 @@ export class GEXChart {
 
   clearGEX() {
     this.gexLevels = [];
+    this._coldGexLevels = [];
     this.spotPrice = 0;
   }
 
@@ -190,11 +195,13 @@ export class GEXChart {
   rebuildGEX() {
     this._clearGroup(this.groups.gexBars);
     this._clearGroup(this.groups.volumeBars);
+    this._clearGroup(this.groups.dealerLevels);
     this._highlightedStrike = null;
     this._clearHighlightGroup();
     buildGEXBars(this);
     buildVolumeBars(this);
     buildPriceLine(this);
+    buildDealerLevels(this);
     updateLabels(this);
     this._render();
   }
@@ -209,6 +216,7 @@ export class GEXChart {
     buildVolumeBars(this);
     buildSeparators(this);
     buildPriceLine(this);
+    buildDealerLevels(this);
     updateLabels(this);
     this._render();
   }

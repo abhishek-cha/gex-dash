@@ -53,7 +53,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 **Option chain fetching** (`src/schwab.ts`):
 - `estToday()`: returns today's date in US Eastern Time (America/New_York) as a midnight-UTC `Date`. Used for all date windowing and caps to ensure consistency regardless of server timezone.
-- `buildDateWindows(intervalDays=21)`: generates rolling date windows spanning 2 years from today (ET). Default is 21-day intervals.
+- `buildDateWindows(intervalDays=14)`: generates rolling date windows spanning 2 years from today (ET). Default is 14-day intervals.
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
 - `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years from today (ET).
 
@@ -68,7 +68,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
   - `price`: fetches Schwab `/pricehistory`, sends `event: price`, then `event: done { type: "price" }`.
   - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`, then `event: done { type: "quote" }`.
-  - `gex`: **progressive streaming** — only fetches the 21-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
+  - `gex`: **progressive streaming** — only fetches the 14-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
   - `expiration`: single lightweight call to Schwab's `/expirationchain` endpoint (no option chain fetching). Returns all available expiration dates (capped to 2 years) in one `event: expirations`. Ends with `event: done { type: "expiration" }`.
 - Per-type `done` events (`done: { type: "price" | "quote" | "gex" | "expiration" }`) fire as each type completes. A final `done: {}` (no type) signals all types are finished.
 - **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~3 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
@@ -83,9 +83,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
 - Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
 - **Data setters never trigger renders.** All rendering is driven by explicit rebuild calls.
-- Key data methods: `loadPriceData()`, `loadGEXData()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`, `mergeGEXChunk(gexData)`.
-- `mergeGEXChunk(gexData)`: accumulates GEX per strike by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI`. Used for progressive streaming — each chunk's GEX is added to the running total.
-- Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars), `rebuild()` (full rebuild, calls both).
+- Key data methods: `loadPriceData()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`, `mergeGEXChunk(gexData)`, `commitGEX()`.
+- **Hot/cold GEX double-buffering**: `mergeGEXChunk(gexData)` accumulates into a cold buffer (`_coldGexLevels`) by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI` per strike. `commitGEX()` promotes cold to hot (`gexLevels`). Only hot is painted by renderers. This prevents pan/zoom during streaming from painting incomplete GEX. `clearGEX()` clears both buffers.
+- Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars + dealer levels), `rebuild()` (full rebuild, calls both).
 - `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
 - Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
 
@@ -112,11 +112,11 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **API layer** (`src/public/js/api.js`):
 - `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Uses epoch-based stale detection (`_activeStreamId`) to discard events from superseded streams. Clears GEX data when a new stream requests GEX. Attaches typed event listeners:
   - `price` / `quote`: buffer data silently (no render).
-  - `gex`: calls `chart.mergeGEXChunk()` to accumulate per-chunk GEX. Unions `selectedExpirations` into state.
+  - `gex`: calls `chart.mergeGEXChunk()` to accumulate into cold buffer. Unions `selectedExpirations` into state.
   - `expirations`: updates `state.allExpirations`.
   - `done { type: "price" }`: if GEX is also streaming, `rebuildPrice()` only (avoids partial GEX render); otherwise `rebuild()` to reposition existing GEX bars on the new price scale.
   - `done { type: "quote" }`: `applyQuote()` updates header + `setSpotPrice()`, then `buildPriceLine()` draws the spot line.
-  - `done { type: "gex" }`: `rebuildGEX()` — uses the current price scale.
+  - `done { type: "gex" }`: `commitGEX()` promotes cold to hot, then `rebuildGEX()`.
   - `done {}` (no type): final signal, closes the EventSource.
   - `error`: hides loading indicators, closes stream.
 - `applyQuote(quoteData, chart)`: updates the header price/change display and calls `chart.setSpotPrice()`.
@@ -143,8 +143,8 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 ## Important Patterns
 
 - **No frontend build step**: frontend uses native ES module `.js` files. Three.js is loaded via CDN import map in `index.html`.
-- **SSE streaming with progressive GEX**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). GEX is streamed progressively — option chains are fetched in 21-day windows, and each chunk's GEX is sent as it resolves. The client accumulates GEX per strike (GEX is summable: `|gamma| * OI * 100 * spot`). Per-type `done` events (`done: { type }`) signal when each data type is complete, enabling targeted renders. The final `done: {}` (no type) closes the stream.
-- **Separation of data and rendering**: `GEXChart` data setters (`loadPriceData`, `setSpotPrice`, `mergeGEXChunk`, `clearGEX`) never trigger renders. Only `done` event handlers call `rebuildPrice()` or `rebuildGEX()`, preventing partial renders during GEX accumulation.
+- **SSE streaming with progressive GEX**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). GEX is streamed progressively — option chains are fetched in 14-day windows, and each chunk's GEX is sent as it resolves. The client accumulates GEX per strike (GEX is summable: `|gamma| * OI * 100 * spot`). Per-type `done` events (`done: { type }`) signal when each data type is complete, enabling targeted renders. The final `done: {}` (no type) closes the stream.
+- **Separation of data and rendering**: `GEXChart` data setters (`loadPriceData`, `setSpotPrice`, `mergeGEXChunk`, `clearGEX`) never trigger renders. Only `done` event handlers call `rebuildPrice()` or `rebuildGEX()`. GEX uses hot/cold double-buffering: chunks accumulate in cold (`_coldGexLevels`), `commitGEX()` promotes to hot (`gexLevels`) before painting. This prevents pan/zoom during streaming from rendering incomplete GEX.
 - **Expiration filter default**: the server computes a 60-day cutoff per chunk and returns `selectedExpirations` in each `gex` event payload. The client unions these additively — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
@@ -160,10 +160,12 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Changing GEX formula**: Modify `calculateGEX()` in `src/gex.ts`. The function receives the raw Schwab option chain object.
 
-**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `21`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`. All date logic uses `estToday()` (US Eastern Time) to match options market conventions.
+**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `14`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`. All date logic uses `estToday()` (US Eastern Time) to match options market conventions.
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
 **Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from the appropriate rebuild method (`rebuildPrice()`, `rebuildGEX()`, or `rebuild()`) in `GEXChart.js`.
 
 **Volume alert dot**: In `renderers.js`, `buildVolumeBars()` renders a small orange circle (`COLORS.volumeAlert`) beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.
+
+**Dealer support/resistance lines**: `buildDealerLevels()` in `renderers.js` draws two dotted horizontal lines across the candle chart area: a red line (`COLORS.dealerResistance`) at the strike above spot with the highest positive net GEX (resistance), and a green line (`COLORS.dealerSupport`) at the strike below spot with the most negative net GEX (support). Uses a dedicated `dealerLevels` Three.js group, cleared in `rebuildGEX()` and `rebuild()`.

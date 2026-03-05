@@ -68,7 +68,6 @@ export function openStream(symbol, { types, chart, state, expirations }) {
   if (wantsPrice) priceLoading.style.display = 'block';
   if (wantsGex) {
     gexLoading.style.display = 'block';
-    chart.clearGEX();
   }
 
   const es = new EventSource(`/api/stream/${encodeURIComponent(symbol)}?${qs}`);
@@ -120,6 +119,7 @@ export function openStream(symbol, { types, chart, state, expirations }) {
       buildPriceLine(chart);
     } else if (data.type === 'gex') {
       gexLoading.style.display = 'none';
+      chart.commitGEX();
       chart.rebuildGEX();
       state.updateFilterButton();
     } else if (data.type === 'expiration') {

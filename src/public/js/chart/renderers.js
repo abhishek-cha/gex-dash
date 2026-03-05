@@ -113,6 +113,45 @@ export function buildVolumeBars(chart) {
   }
 }
 
+export function buildDealerLevels(chart) {
+  const s = chart._sectionBounds();
+  if (!chart.gexLevels.length || !chart.spotPrice) return;
+
+  // Global max positive netGex above spot (resistance), global min negative netGex below spot (support)
+  let resistanceStrike = null;
+  let maxGex = 0;
+  let supportStrike = null;
+  let minGex = 0;
+
+  for (const level of chart.gexLevels) {
+    if (level.strike > chart.spotPrice && level.netGex > maxGex) {
+      maxGex = level.netGex;
+      resistanceStrike = level.strike;
+    } else if (level.strike < chart.spotPrice && level.netGex < minGex) {
+      minGex = level.netGex;
+      supportStrike = level.strike;
+    }
+  }
+
+  const dashLen = 6;
+  const gapLen = 4;
+  const drawDottedLine = (price, color) => {
+    const y = chart._priceToY(price);
+    if (y < s.bottom || y > s.top) return;
+    for (let x = s.candle.left; x < s.candle.right; x += dashLen + gapLen) {
+      chart.groups.dealerLevels.add(
+        chart._makeLine(
+          [[x, y], [Math.min(x + dashLen, s.candle.right), y]],
+          color, 0.6
+        )
+      );
+    }
+  };
+
+  if (resistanceStrike) drawDottedLine(resistanceStrike, COLORS.dealerResistance);
+  if (supportStrike) drawDottedLine(supportStrike, COLORS.dealerSupport);
+}
+
 export function buildSeparators(chart) {
   const s = chart._sectionBounds();
   chart.groups.overlays.add(

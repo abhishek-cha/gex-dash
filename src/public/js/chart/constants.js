@@ -11,6 +11,8 @@ export const COLORS = {
   volume:       0x00bcd4,
   volumeAlert:  0xff9800,
   separator:    0x30363d,
+  dealerResistance: 0xef5350,
+  dealerSupport:    0x26a69a,
 };
 
 export const LAYOUT = {

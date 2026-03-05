@@ -71,7 +71,7 @@ function dateStr(d: Date): string {
 }
 
 export function buildDateWindows(
-  intervalDays = 21
+  intervalDays = 14
 ): { fromDate: string; toDate: string }[] {
   const windows: { fromDate: string; toDate: string }[] = [];
   const now = estToday();
@@ -136,6 +136,8 @@ export async function fetchExpirations(
   symbol: string,
   accessToken: string
 ): Promise<{ expirationDate: string; daysToExpiration: number; expirationType: string; standard: boolean }[]> {
+  const now = estToday();
+  const cap = new Date(Date.UTC(now.getUTCFullYear() + 2, now.getUTCMonth(), now.getUTCDate()));
   const params = new URLSearchParams({ symbol });
   const resp = await fetch(`${SCHWAB_API_BASE}/expirationchain?${params}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -144,10 +146,8 @@ export async function fetchExpirations(
     throw new Error(`Schwab expirationchain API returned ${resp.status}`);
   }
   const data = await resp.json();
-  const cap = estToday();
-  cap.setUTCFullYear(cap.getUTCFullYear() + 2);
   return (data.expirationList || []).filter(
-    (e: any) => new Date(e.expirationDate) <= cap
+    (e: any) => new Date(e.expirationDate) >= now && new Date(e.expirationDate) <= cap
   );
 }
 
