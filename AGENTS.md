@@ -8,7 +8,7 @@ GEX Dash is a single-page web app that visualizes Gamma Exposure (GEX) for equit
 
 ```
 src/
-├── server.ts              # Express setup, static serving, route registration, HTTPS bootstrap
+├── server.ts              # Express setup, JSON body parsing, static serving, route registration, HTTPS bootstrap
 ├── certs.ts               # Self-signed TLS certificate generation
 ├── schwab.ts              # Schwab OAuth setup, token persistence, all Schwab API fetch functions
 │                          #   (quote, price history, option chains), date windowing, option chain merging
@@ -16,7 +16,7 @@ src/
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
 │   ├── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
-│   └── watchlist.ts       # GET/POST/DELETE /api/watchlist (JSON file persistence)
+│   └── watchlist.ts       # GET/PUT /api/watchlist, POST/DELETE /api/watchlist/:section/:symbol
 └── public/
     ├── index.html         # HTML shell (no embedded CSS or JS)
     ├── css/
@@ -25,7 +25,7 @@ src/
         ├── main.js        # Entry point: init(), app state, event wiring
         ├── api.js         # API functions: openStream() via EventSource, checkAuth()
         ├── expDialog.js       # Expiration filter dialog logic
-        ├── watchlistDialog.js # Watchlist dialog (add/remove/select symbols)
+        ├── watchlist.js       # Watchlist sidebar (sections, SSE quotes, drag-to-reorder, context menu)
         └── chart/
             ├── constants.js   # COLORS, LAYOUT, FREQ_MAP, RANGE_MAP
             ├── GEXChart.js    # Core chart class: scene, camera, coordinate transforms, rebuild
@@ -58,11 +58,13 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years from today (ET).
 
 **Watchlist** (`src/routes/watchlist.ts`):
-- Simple REST API for managing a list of ticker symbols.
-- `GET /api/watchlist`: returns the array of symbols.
-- `POST /api/watchlist/:symbol`: adds a symbol (uppercased, deduplicated).
-- `DELETE /api/watchlist/:symbol`: removes a symbol.
+- REST API for managing watchlist sections. Data model: `{ name: string, symbols: string[] }[]`.
+- `GET /api/watchlist`: returns the sections array. Auto-migrates legacy flat `string[]` format on first read.
+- `PUT /api/watchlist`: replaces all sections (used by frontend for reorder/move/delete operations).
+- `POST /api/watchlist/:section/:symbol`: adds a symbol to a named section (uppercased, deduplicated).
+- `DELETE /api/watchlist/:section/:symbol`: removes a symbol from a section.
 - Persisted to `watchlist.json` at project root (gitignored).
+- `express.json()` middleware is registered in `server.ts` for the PUT body parsing.
 
 **Stream endpoint** (`src/routes/stream.ts` - `GET /api/stream/:symbol`):
 - Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
@@ -87,6 +89,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - **Hot/cold GEX double-buffering**: `mergeGEXChunk(gexData)` accumulates into a cold buffer (`_coldGexLevels`) by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI` per strike. `commitGEX()` promotes cold to hot (`gexLevels`). Only hot is painted by renderers. This prevents pan/zoom during streaming from painting incomplete GEX. `clearGEX()` clears both buffers.
 - Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars + dealer levels), `rebuild()` (full rebuild, calls both).
 - `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
+- Uses `ResizeObserver` on the container element (not `window.resize`) so the chart resizes correctly when the watchlist sidebar toggles.
 - Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
 
 **Chart interactions** (`src/public/js/chart/interaction.js`):
@@ -98,10 +101,16 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - Tooltip is shown anchored to the GEX section based on crosshair Y position (nearest strike). Shows call/put/net GEX, volume, and OI. No tooltip on the candle area itself.
 - Crosshair triggers `highlightStrike()` / `clearHighlight()` for glow effect on hovered bars. Colors use `COLORS` constants via a `hexCss()` helper (no hardcoded hex strings).
 
-**Watchlist dialog** (`src/public/js/watchlistDialog.js`):
-- `openWatchlist(selectCb)`: fetches `/api/watchlist`, renders the list, opens the backdrop. `selectCb(symbol)` is called when a symbol is clicked.
-- `closeWatchlist()`: hides the dialog.
-- Add input + button calls `POST /api/watchlist/:symbol`, delete button calls `DELETE`, both re-render inline.
+**Watchlist sidebar** (`src/public/js/watchlist.js`):
+- Persistent right sidebar panel (TradingView-style), open by default. Toggle via Watchlist button in header.
+- **Sections**: symbols organized into named collapsible sections. Data model mirrors backend: `[{ name, symbols }]`.
+- **SSE quote fetching**: opens one `EventSource` per symbol via `/api/stream/:symbol?types=quote` (independent of the main chart stream — avoids `_activeStreamId` conflicts in `api.js`). Streams are opened on `openWatchlist()` and closed on `closeWatchlist()`.
+- **Targeted DOM mutations**: after initial `render()` on open, all add/remove/move/reorder operations mutate the DOM directly (appendChild, before/after, remove) without re-rendering. Quote data lives in the DOM elements — no cache needed. `saveWatchlist()` is fire-and-forget (PUT, no await).
+- **Drag-to-reorder**: HTML5 native drag-and-drop. Rows can be reordered within or moved across sections. Drop position determined by cursor position relative to target row midpoint.
+- **Context menu**: right-click a row to move it to an existing section, create a new section, or remove it. Menu positioned with viewport clamping.
+- **Circular + button**: `#wl-add-btn` in the header, visible only when `activeSymbol` is not in any section. Adds to the first section (creates "Watchlist" default section if none exist).
+- **Toggle indicator**: Watchlist button gets `.active` class when panel is open.
+- Exports: `openWatchlist(selectCb)`, `closeWatchlist()`, `setActiveSymbol(sym)`.
 
 **App state** (`src/public/js/main.js`):
 - `state.currentSymbol`: currently loaded ticker.
@@ -148,7 +157,8 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 - **Expiration filter default**: the server computes a 60-day cutoff per chunk and returns `selectedExpirations` in each `gex` event payload. The client unions these additively — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
-- **Watchlist persistence**: symbols are stored in `watchlist.json` (gitignored) via simple REST endpoints in `src/routes/watchlist.ts`. The frontend dialog (`watchlistDialog.js`) manages add/remove/select.
+- **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream.
+- **ResizeObserver for chart**: `GEXChart` uses `new ResizeObserver().observe(container)` instead of `window.resize` so the chart properly resizes when the watchlist sidebar is toggled (sidebar toggle changes container width but doesn't fire `window.resize`).
 
 ## Common Modification Patterns
 

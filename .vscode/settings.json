@@ -1,4 +1,4 @@
 {
     "claudeCode.disableLoginPrompt": true,
-    "claudeCode.preferredLocation": "panel"
+    "claudeCode.preferredLocation": "sidebar"
 }

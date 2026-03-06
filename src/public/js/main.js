@@ -1,7 +1,7 @@
 import { GEXChart } from './chart/GEXChart.js';
 import { checkAuth, openStream } from './api.js';
 import { openExpDialog, closeExpDialog, applyExpFilter } from './expDialog.js';
-import { openWatchlist, closeWatchlist } from './watchlistDialog.js';
+import { openWatchlist, closeWatchlist, setActiveSymbol } from './watchlist.js';
 
 // --- App state ---
 
@@ -54,6 +54,7 @@ function loadSymbol(symbol) {
   state.selectedExpirations = new Set();
   state.updateFilterButton();
 
+  setActiveSymbol(symbol);
   document.getElementById('hdr-symbol').textContent = symbol;
   document.getElementById('hdr-price').textContent = '--';
   document.getElementById('hdr-change').textContent = '--';
@@ -142,16 +143,22 @@ async function init() {
     if (e.target === e.currentTarget) closeExpDialog();
   });
 
+  const wlSelectCb = (sym) => {
+    input.value = sym;
+    loadSymbol(sym);
+  };
+
   document.getElementById('watchlist-btn').addEventListener('click', () => {
-    openWatchlist((sym) => {
-      input.value = sym;
-      loadSymbol(sym);
-    });
+    const panel = document.getElementById('watchlist-panel');
+    if (panel.classList.contains('open')) {
+      closeWatchlist();
+    } else {
+      openWatchlist(wlSelectCb);
+    }
   });
-  document.getElementById('wl-dialog-close').addEventListener('click', closeWatchlist);
-  document.getElementById('wl-dialog-backdrop').addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeWatchlist();
-  });
+
+  // Open watchlist by default
+  await openWatchlist(wlSelectCb);
 
   input.value = 'AAPL';
   go();

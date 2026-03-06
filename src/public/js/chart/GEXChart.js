@@ -50,7 +50,7 @@ export class GEXChart {
     setupInteraction(this);
     this._animate();
 
-    window.addEventListener('resize', () => this._onResize());
+    new ResizeObserver(() => this._onResize()).observe(this.container);
   }
 
   _sectionBounds() {

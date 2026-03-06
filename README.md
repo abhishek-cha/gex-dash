@@ -6,14 +6,14 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 
 ```
 src/
-├── server.ts              # Express setup, route registration, HTTPS bootstrap
+├── server.ts              # Express setup, JSON body parsing, route registration, HTTPS bootstrap
 ├── certs.ts               # Self-signed TLS certificate generation
 ├── schwab.ts              # Schwab OAuth, token persistence, API fetch functions (quote, price, chains)
 ├── gex.ts                 # GEX calculation engine
 ├── routes/
 │   ├── auth.ts            # /auth/login, /auth/callback, /auth/status
 │   ├── stream.ts          # GET /api/stream/:symbol (SSE, unified price + GEX)
-│   └── watchlist.ts       # GET/POST/DELETE /api/watchlist (persisted to watchlist.json)
+│   └── watchlist.ts       # GET/PUT /api/watchlist, POST/DELETE /api/watchlist/:section/:symbol
 └── public/
     ├── index.html         # HTML shell
     ├── css/styles.css     # All styles
@@ -21,7 +21,7 @@ src/
         ├── main.js        # Entry point, app state, event wiring
         ├── api.js         # API calls, SSE stream via EventSource
         ├── expDialog.js       # Expiration filter dialog
-        ├── watchlistDialog.js # Watchlist dialog
+        ├── watchlist.js       # Watchlist sidebar (sections, quotes, drag-to-reorder)
         └── chart/
             ├── constants.js   # Colors, layout, frequency/range maps
             ├── GEXChart.js    # Core chart class (Three.js scene, coordinates)
@@ -154,9 +154,10 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | `/auth/callback` | GET | OAuth callback handler |
 | `/auth/status` | GET | Returns `{ authenticated: boolean }` |
 | `/api/stream/:symbol` | GET | SSE endpoint. Required: `types` (comma-separated: `price`, `gex`, `quote`). Optional: `frequencyType`, `frequency`, `periodType`, `period` (price params), `expirations` (comma-separated dates for GEX filter) |
-| `/api/watchlist` | GET | Returns saved watchlist symbols as JSON array |
-| `/api/watchlist/:symbol` | POST | Adds a symbol to the watchlist |
-| `/api/watchlist/:symbol` | DELETE | Removes a symbol from the watchlist |
+| `/api/watchlist` | GET | Returns watchlist sections as JSON array `[{ name, symbols }]` |
+| `/api/watchlist` | PUT | Replaces all sections (used for reorder/move operations) |
+| `/api/watchlist/:section/:symbol` | POST | Adds a symbol to a named section |
+| `/api/watchlist/:section/:symbol` | DELETE | Removes a symbol from a section |
 
 ## Expiration Filter
 
@@ -168,13 +169,16 @@ The Expirations button in the header opens a multi-select dialog for filtering w
 
 ## Watchlist
 
-The Watchlist button (beside Load) opens a dialog for saving frequently used symbols:
+A persistent right sidebar (TradingView-style) for managing and monitoring symbols. Open by default; toggle with the **Watchlist** button in the header.
 
-- **Add**: Type a symbol and press Enter or click **+** to save it.
-- **Load**: Click any symbol in the list to load its chart immediately.
-- **Remove**: Click the **×** next to a symbol to delete it.
+- **Columns**: Symbol, Last Price, Change, Change% — live-updated via per-symbol SSE quote streams.
+- **Sections**: Symbols are organized into named sections with collapsible headers. Right-click a symbol to move it to another section or create a new one.
+- **Add**: When the current symbol is not in any watchlist section, a circular **+** button appears in the header bar. Click it to add the symbol to the first section.
+- **Load**: Click any row to load that symbol's chart.
+- **Reorder**: Drag rows to reorder within or across sections.
+- **Remove**: Hover a row and click **×**, or right-click and choose "Remove".
 
-Symbols are persisted in `watchlist.json` at the project root (gitignored). The file is created automatically on first use.
+Data is persisted in `watchlist.json` at the project root (gitignored) as `[{ name: string, symbols: string[] }]`. Legacy flat arrays are auto-migrated to the sections format on first read.
 
 ## Tech Stack
 
