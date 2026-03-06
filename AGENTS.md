@@ -53,7 +53,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 **Option chain fetching** (`src/schwab.ts`):
 - `estToday()`: returns today's date in US Eastern Time (America/New_York) as a midnight-UTC `Date`. Used for all date windowing and caps to ensure consistency regardless of server timezone.
-- `buildDateWindows(intervalDays=14)`: generates rolling date windows spanning 2 years from today (ET). Default is 14-day intervals.
+- `buildDateWindows(intervalDays=7)`: generates rolling date windows spanning 2 years from today (ET). Default is 7-day intervals.
 - `fetchOptionChainWindow()`: fetches a single window from Schwab's `/chains` endpoint.
 - `fetchExpirations()`: lightweight call to Schwab's `/expirationchain` endpoint — returns only expiration dates (no strikes/greeks/contracts), capped to 2 years from today (ET).
 
@@ -68,7 +68,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - Unified SSE endpoint. The `types` query param (comma-separated) controls what data is fetched:
   - `price`: fetches Schwab `/pricehistory`, sends `event: price`, then `event: done { type: "price" }`.
   - `quote`: fetches Schwab `/quotes` endpoint, sends `event: quote` with `{ price, change, percentChange }`, then `event: done { type: "quote" }`.
-  - `gex`: **progressive streaming** — only fetches the 14-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
+  - `gex`: **progressive streaming** — only fetches the 7-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
   - `expiration`: single lightweight call to Schwab's `/expirationchain` endpoint (no option chain fetching). Returns all available expiration dates (capped to 2 years) in one `event: expirations`. Ends with `event: done { type: "expiration" }`.
 - Per-type `done` events (`done: { type: "price" | "quote" | "gex" | "expiration" }`) fire as each type completes. A final `done: {}` (no type) signals all types are finished.
 - **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~3 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
@@ -160,7 +160,7 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Changing GEX formula**: Modify `calculateGEX()` in `src/gex.ts`. The function receives the raw Schwab option chain object.
 
-**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `14`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`. All date logic uses `estToday()` (US Eastern Time) to match options market conventions.
+**Adjusting the date window size or cap**: Change the `intervalDays` default (currently `7`) in `buildDateWindows()` or the `2` (years) cap in `src/schwab.ts`. All date logic uses `estToday()` (US Eastern Time) to match options market conventions.
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 

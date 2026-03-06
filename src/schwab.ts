@@ -71,7 +71,7 @@ function dateStr(d: Date): string {
 }
 
 export function buildDateWindows(
-  intervalDays = 14
+  intervalDays = 7
 ): { fromDate: string; toDate: string }[] {
   const windows: { fromDate: string; toDate: string }[] = [];
   const now = estToday();

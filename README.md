@@ -45,10 +45,10 @@ sequenceDiagram
     Server-->>Browser: Redirect to /
 
     Browser->>Server: GET /api/stream/:symbol?types=price,gex,quote,expiration (SSE)
-    Note over Server: GEX: ~3 windows (60-day default). Expirations: single /expirationchain call.
+    Note over Server: GEX: ~9 windows (60-day default). Expirations: single /expirationchain call.
     Server->>Schwab: Quote API
     Server->>Schwab: Price history API
-    Server->>Schwab: GEX option chain windows (~3, covering 60 days)
+    Server->>Schwab: GEX option chain windows (~9, covering 60 days)
     Server->>Schwab: Expiration chain API (lightweight, dates only)
     Schwab-->>Server: Quote data
     Server-->>Browser: event: quote
@@ -85,7 +85,7 @@ Two dealer level lines are drawn across the candlestick chart: a **red dotted li
 
 The `/api/stream/:symbol` endpoint uses **Server-Sent Events** with a `types` query param to control what data is streamed:
 
-- **`types=price,gex,quote,expiration`** (initial symbol load): GEX fetches ~3 option chain windows (60-day default), while `expiration` makes a single lightweight call to Schwab's `/expirationchain` endpoint (returns dates only, capped to 2 years). GEX is streamed **progressively** — each chunk's GEX is sent as it resolves, accumulated in a cold buffer on the client (GEX is additive), then promoted to the hot buffer on completion. Per-type `done` events fire as each type completes; a final `done` (no type) signals stream end.
+- **`types=price,gex,quote,expiration`** (initial symbol load): GEX fetches ~9 option chain windows (60-day default), while `expiration` makes a single lightweight call to Schwab's `/expirationchain` endpoint (returns dates only, capped to 2 years). GEX is streamed **progressively** — each chunk's GEX is sent as it resolves, accumulated in a cold buffer on the client (GEX is additive), then promoted to the hot buffer on completion. Per-type `done` events fire as each type completes; a final `done` (no type) signals stream end.
 - **`types=price`** (freq/range change): fetches only price history, sends `event: price` + `event: done { type: "price" }` + `event: done`.
 - **`types=gex,quote&expirations=...`** (custom filter): fetches option chains and quote in parallel with progressive GEX streaming, sends multiple `event: gex` chunks + `event: done { type: "gex" }`.
 
