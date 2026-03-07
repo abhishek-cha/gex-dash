@@ -2,6 +2,7 @@ import { GEXChart } from './chart/GEXChart.js';
 import { checkAuth, openStream } from './api.js';
 import { openExpDialog, closeExpDialog, applyExpFilter } from './expDialog.js';
 import { openWatchlist, closeWatchlist, setActiveSymbol } from './watchlist.js';
+import { setupWatchlistResize } from './resize.js';
 
 // --- App state ---
 
@@ -159,6 +160,8 @@ async function init() {
 
   // Open watchlist by default
   await openWatchlist(wlSelectCb);
+
+  setupWatchlistResize();
 
   input.value = 'AAPL';
   go();

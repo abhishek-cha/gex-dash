@@ -24,6 +24,7 @@ src/
     └── js/
         ├── main.js        # Entry point: init(), app state, event wiring
         ├── api.js         # API functions: openStream() via EventSource, checkAuth()
+        ├── resize.js          # Watchlist sidebar drag-to-resize logic
         ├── expDialog.js       # Expiration filter dialog logic
         ├── watchlist.js       # Watchlist sidebar (sections, SSE quotes, drag-to-reorder, context menu)
         └── chart/
@@ -109,8 +110,10 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - **Drag-to-reorder**: HTML5 native drag-and-drop. Rows can be reordered within or moved across sections. Drop position determined by cursor position relative to target row midpoint.
 - **Context menu**: right-click a row to move it to an existing section, create a new section, or remove it. Menu positioned with viewport clamping.
 - **Circular + button**: `#wl-add-btn` in the header, visible only when `activeSymbol` is not in any section. Adds to the first section (creates "Watchlist" default section if none exist).
+- **Resizable width**: a drag handle (`#wl-resize-handle`) between `#chart-wrap` and `#watchlist-panel` allows resizing (180–340px). Below 280px the panel gets a `.compact` class that hides Change and Change% columns via CSS.
+- **Quote sync from chart stream**: when the main chart stream's quote arrives, `api.js` calls `updateWatchlistQuote(sym, data)` to push the fresher quote into the watchlist row (if it exists), keeping it in sync without waiting for the independent per-symbol SSE stream.
 - **Toggle indicator**: Watchlist button gets `.active` class when panel is open.
-- Exports: `openWatchlist(selectCb)`, `closeWatchlist()`, `setActiveSymbol(sym)`.
+- Exports: `openWatchlist(selectCb)`, `closeWatchlist()`, `setActiveSymbol(sym)`, `updateWatchlistQuote(sym, quoteData)`.
 
 **App state** (`src/public/js/main.js`):
 - `state.currentSymbol`: currently loaded ticker.
@@ -124,7 +127,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
   - `gex`: calls `chart.mergeGEXChunk()` to accumulate into cold buffer. Unions `selectedExpirations` into state.
   - `expirations`: updates `state.allExpirations`.
   - `done { type: "price" }`: if GEX is also streaming, `rebuildPrice()` only (avoids partial GEX render); otherwise `rebuild()` to reposition existing GEX bars on the new price scale.
-  - `done { type: "quote" }`: `applyQuote()` updates header + `setSpotPrice()`, then `buildPriceLine()` draws the spot line.
+  - `done { type: "quote" }`: `applyQuote()` updates header + `setSpotPrice()`, `updateWatchlistQuote()` syncs the watchlist row, then `buildPriceLine()` draws the spot line.
   - `done { type: "gex" }`: `commitGEX()` promotes cold to hot, then `rebuildGEX()`.
   - `done {}` (no type): final signal, closes the EventSource.
   - `error`: hides loading indicators, closes stream.
@@ -157,8 +160,9 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 - **Expiration filter default**: the server computes a 60-day cutoff per chunk and returns `selectedExpirations` in each `gex` event payload. The client unions these additively — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
-- **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream.
-- **ResizeObserver for chart**: `GEXChart` uses `new ResizeObserver().observe(container)` instead of `window.resize` so the chart properly resizes when the watchlist sidebar is toggled (sidebar toggle changes container width but doesn't fire `window.resize`).
+- **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream. The main chart quote also syncs to the watchlist row via `updateWatchlistQuote()`.
+- **Watchlist resize**: `resize.js` adds drag-to-resize on the `#wl-resize-handle` element between chart and sidebar (180–340px range). A `ResizeObserver` on the panel toggles a `.compact` CSS class below 280px, hiding the Change/Change% columns.
+- **ResizeObserver for chart**: `GEXChart` uses `new ResizeObserver().observe(container)` instead of `window.resize` so the chart properly resizes when the watchlist sidebar is toggled or resized (sidebar changes container width but doesn't fire `window.resize`).
 
 ## Common Modification Patterns
 

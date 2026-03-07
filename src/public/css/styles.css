@@ -97,6 +97,7 @@ body {
 
 #chart-wrap {
   flex: 1;
+  min-width: 200px;
   position: relative;
   overflow: hidden;
 }
@@ -351,18 +352,56 @@ body {
   overflow: hidden;
 }
 
+/* --- Resize handles --- */
+
+#wl-resize-handle {
+  display: none;
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+#wl-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: #21262d;
+}
+#wl-resize-handle:hover,
+#wl-resize-handle.active {
+  background: rgba(31,111,235,0.3);
+}
+#wl-resize-handle:hover::after,
+#wl-resize-handle.active::after {
+  background: #1f6feb;
+}
+
 /* --- Watchlist sidebar --- */
 
 #watchlist-panel {
   display: none;
   flex-direction: column;
   width: 340px;
+  min-width: 180px;
   flex-shrink: 0;
   background: #0d1117;
   border-left: 1px solid #21262d;
 }
 #watchlist-panel.open {
   display: flex;
+}
+#wl-resize-handle.visible {
+  display: block;
+}
+#watchlist-panel.compact .wl-col-header span:nth-child(3),
+#watchlist-panel.compact .wl-col-header span:nth-child(4),
+#watchlist-panel.compact .wl-row-chg,
+#watchlist-panel.compact .wl-row-chgpct {
+  display: none;
 }
 
 #wl-add-btn {

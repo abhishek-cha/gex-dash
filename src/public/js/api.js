@@ -1,5 +1,6 @@
 import { FREQ_MAP, RANGE_MAP } from './chart/constants.js';
 import { buildPriceLine } from './chart/renderers.js';
+import { updateWatchlistQuote } from './watchlist.js';
 
 export async function checkAuth() {
   const res = await fetch('/auth/status');
@@ -115,6 +116,7 @@ export function openStream(symbol, { types, chart, state, expirations }) {
       wantsGex ? chart.rebuildPrice() : chart.rebuild();
     } else if (data.type === 'quote' && pendingQuote) {
       applyQuote(pendingQuote, chart);
+      updateWatchlistQuote(symbol, pendingQuote);
       pendingQuote = null;
       buildPriceLine(chart);
     } else if (data.type === 'gex') {

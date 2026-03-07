@@ -524,15 +524,22 @@ export async function openWatchlist(selectCb) {
   await loadWatchlist();
   render();
   panel.classList.add('open');
+  document.getElementById('wl-resize-handle').classList.add('visible');
   updateToggleBtn();
   fetchAllQuotes();
 }
 
 export function closeWatchlist() {
   panel.classList.remove('open');
+  document.getElementById('wl-resize-handle').classList.remove('visible');
   updateToggleBtn();
   closeQuoteStreams();
   closeCtxMenu();
+}
+
+export function updateWatchlistQuote(sym, quoteData) {
+  const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+  if (row) applyQuoteToRow(row, quoteData);
 }
 
 export function setActiveSymbol(sym) {

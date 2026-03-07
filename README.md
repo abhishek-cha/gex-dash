@@ -20,6 +20,7 @@ src/
     └── js/
         ├── main.js        # Entry point, app state, event wiring
         ├── api.js         # API calls, SSE stream via EventSource
+        ├── resize.js          # Watchlist sidebar drag-to-resize
         ├── expDialog.js       # Expiration filter dialog
         ├── watchlist.js       # Watchlist sidebar (sections, quotes, drag-to-reorder)
         └── chart/
@@ -171,7 +172,8 @@ The Expirations button in the header opens a multi-select dialog for filtering w
 
 A persistent right sidebar (TradingView-style) for managing and monitoring symbols. Open by default; toggle with the **Watchlist** button in the header.
 
-- **Columns**: Symbol, Last Price, Change, Change% — live-updated via per-symbol SSE quote streams.
+- **Columns**: Symbol, Last Price, Change, Change% — live-updated via per-symbol SSE quote streams. Loading a symbol's chart also updates its watchlist row with the fresher quote.
+- **Resize**: Drag the left edge of the sidebar to resize its width (180–340px). Below 280px, the Change and Change% columns are hidden automatically, showing only Symbol and Last.
 - **Sections**: Symbols are organized into named sections with collapsible headers. Right-click a symbol to move it to another section or create a new one.
 - **Add**: When the current symbol is not in any watchlist section, a circular **+** button appears in the header bar. Click it to add the symbol to the first section.
 - **Load**: Click any row to load that symbol's chart.
