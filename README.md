@@ -12,6 +12,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 - **Progressive SSE streaming** — GEX chunks stream as they resolve; price, quote, and expirations load in parallel
 - **Expiration filter** — Multi-select dialog to choose which expirations feed the GEX calculation (default 60 days, up to 2 years)
 - **Watchlist sidebar** — Persistent, resizable sidebar with live quotes, drag-to-reorder, named sections, and context menu actions
+- **Resizable sections** — Drag handles between Price, GEX, and Volume sections to resize them horizontally
 - **Interactive chart** — Pan, zoom, crosshair tooltips, and axis-anchored scaling (see interactions below)
 
 ## Prerequisites
@@ -61,6 +62,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | Price axis | Click + drag up/down | Zoom price scale around click point |
 | Price axis | Double-click | Reset to auto-fit Y |
 | X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
+| Section borders | Drag left/right | Resize adjacent sections horizontally (min-widths enforced) |
 | Any section | Crosshair hover | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, and OI; hovered bars glow |
 
 All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.

@@ -132,8 +132,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`LayoutManager`** (`src/public/js/layout.js`):
 - Creates `ViewportModel` and section containers inside `#chart-wrap`.
 - Sections arranged via CSS flexbox: price (flex:1), gex (22%), volume (13%).
+- **Resizable section widths**: drag handles (`.section-resize-handle`) between adjacent sections allow horizontal resizing. Drag logic works in proportional flex ratios (`flex: <ratio> 0 0%`) so sections scale naturally when the container resizes (e.g. watchlist toggle). Min-widths enforced: price 200px, gex 120px, volume 80px. Handles auto-hide when an adjacent section is toggled off.
 - `toggleSection(key)` shows/hides individual sections.
-- `init()` creates all section DOM wrappers and instantiates components.
+- `init()` creates all section DOM wrappers, resize handles, and instantiates components.
 
 **Watchlist sidebar** (`src/public/js/watchlist.js`):
 - Persistent right sidebar panel (TradingView-style), open by default. Toggle via Watchlist button in header.
@@ -207,14 +208,15 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
 - **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream. The main chart quote syncs to the watchlist row via the `data:quote` bus event handled in `main.js`.
 - **Watchlist resize**: `resize.js` adds drag-to-resize on the `#wl-resize-handle` element between chart and sidebar (180–340px range). A `ResizeObserver` on the panel toggles a `.compact` CSS class below 280px, hiding the Change/Change% columns.
-- **ResizeObserver per section**: Each chart section (`BaseSection`) uses its own `ResizeObserver` on its container element. When the watchlist sidebar toggles or resizes, the CSS flexbox reflows section widths and each section auto-rebuilds.
+- **Section resize handles**: `LayoutManager` inserts `.section-resize-handle` divs between adjacent sections. On drag, all visible sections are expressed as proportional `flex: <ratio> 0 0%` values so the non-dragged section stays stable. On mouseup, the flex ratios remain — no pixel-to-flex conversion needed — so sections scale naturally when the container resizes (watchlist toggle/resize). CSS min-widths (price 200px, gex 120px, volume 80px) are enforced as percentage floor during drag.
+- **ResizeObserver per section**: Each chart section (`BaseSection`) uses its own `ResizeObserver` on its container element. When the watchlist sidebar toggles or resizes, or section handles are dragged, the CSS flexbox reflows section widths and each section auto-rebuilds.
 - **EventBus for decoupling**: Components communicate via `bus.emit()`/`bus.on()` instead of direct method calls. `viewport:change` triggers all section rebuilds. `interaction:crosshair` syncs hover highlights bidirectionally across all sections — PriceChart, GEXSection, and VolumeSection each emit crosshair events on mousemove and subscribe to events from other sections, showing a horizontal crosshair line at the corresponding price.
 
 ## Common Modification Patterns
 
 **Adding a new API endpoint**: For new data types, add a handler in `src/routes/stream.ts` and register a new `types` value. For non-streaming endpoints, create a new route file in `src/routes/`. Use the `getSchwabAuth()` pattern to get the auth instance. Register the route in `src/server.ts`.
 
-**Changing section sizes**: Modify CSS classes `.section-gex` (width %) and `.section-volume` (width %) in `css/styles.css`. Price section is `flex: 1` and fills remaining space.
+**Changing section sizes**: Default sizes are CSS classes `.section-gex` (width 22%) and `.section-volume` (width 13%) in `css/styles.css`. Price section is `flex: 1` and fills remaining space. Users can also drag section resize handles at runtime; `LayoutManager` overrides these with proportional flex ratios on drag.
 
 **Adding a new chart section**: Create a new class extending `BaseSection`. Subscribe to `viewport:change` in the constructor. Call `this._initHighlightGroup()` if the section needs hover highlights. Add a container in `LayoutManager.init()` and register the section in `_sectionOrder`.
 

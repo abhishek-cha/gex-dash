@@ -116,6 +116,31 @@ body {
 .section-gex { width: 22%; min-width: 120px; }
 .section-volume { width: 13%; min-width: 80px; }
 
+.section-resize-handle {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+.section-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 2px;
+  width: 1px;
+  background: #21262d;
+}
+.section-resize-handle:hover,
+.section-resize-handle.active {
+  background: rgba(31,111,235,0.3);
+}
+.section-resize-handle:hover::after,
+.section-resize-handle.active::after {
+  background: #1f6feb;
+}
+
 .labels-overlay {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
