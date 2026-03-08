@@ -30,7 +30,6 @@ export function applyExpFilter(state, onApply) {
   const checkboxes = document.querySelectorAll('#exp-dialog-list input[type="checkbox"]');
   state.selectedExpirations = new Set();
   checkboxes.forEach(cb => { if (cb.checked) state.selectedExpirations.add(cb.value); });
-  state.updateFilterButton();
   closeExpDialog();
   onApply();
 }

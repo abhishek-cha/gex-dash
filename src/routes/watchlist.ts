@@ -37,9 +37,17 @@ export function registerWatchlistRoutes(app: Express, projectRoot: string) {
 
   // Replace entire watchlist (reorder, rename sections, etc.)
   app.put("/api/watchlist", (req, res) => {
-    const sections = req.body as WatchlistSection[];
+    const sections = req.body;
     if (!Array.isArray(sections)) {
       return res.status(400).json({ error: "Expected array of sections" });
+    }
+    for (const s of sections) {
+      if (!s || typeof s.name !== 'string' || !Array.isArray(s.symbols)) {
+        return res.status(400).json({ error: "Each section must have a name string and symbols array" });
+      }
+      if (!s.symbols.every((sym: unknown) => typeof sym === 'string')) {
+        return res.status(400).json({ error: "All symbols must be strings" });
+      }
     }
     write(sections);
     res.json(sections);

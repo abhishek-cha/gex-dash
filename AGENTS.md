@@ -103,8 +103,9 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 **`BaseSection`** (`src/public/js/chart/BaseSection.js`):
 - Base class for all chart sections. Creates a Three.js `WebGLRenderer`, `OrthographicCamera`, `Scene`.
-- Manages groups, resize via `ResizeObserver`, animation loop.
-- Provides `makePlane()`, `makeLine()`, `priceToY()`, `yToPrice()` shared by subclasses.
+- Manages groups, resize via `ResizeObserver`, on-demand rendering (single `requestAnimationFrame` per `render()` call, coalesced via `_renderScheduled` flag — no continuous animation loop).
+- Provides `makePlane()`, `makeLine()`, `batchPlanes()`, `priceToY()`, `yToPrice()` shared by subclasses.
+- Shared helpers: `_initHighlightGroup()`, `_clearHighlightGroup()` for hover highlight management (used by GEXSection, VolumeSection). `_gexBarBounds(strike, sortedStrikes, idx)` computes bar Y/height from sorted strike array and pre-computed index.
 
 **`PriceChart`** (`src/public/js/chart/PriceChart.js`):
 - Candlestick chart with grid, price axis labels, price line, dealer levels.
@@ -215,7 +216,7 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Changing section sizes**: Modify CSS classes `.section-gex` (width %) and `.section-volume` (width %) in `css/styles.css`. Price section is `flex: 1` and fills remaining space.
 
-**Adding a new chart section**: Create a new class extending `BaseSection`. Subscribe to `viewport:change` in the constructor. Add a container in `LayoutManager.init()` and register the section in `_sectionOrder`.
+**Adding a new chart section**: Create a new class extending `BaseSection`. Subscribe to `viewport:change` in the constructor. Call `this._initHighlightGroup()` if the section needs hover highlights. Add a container in `LayoutManager.init()` and register the section in `_sectionOrder`.
 
 **Adding new UI controls**: Add HTML elements inside `<div id="header">` in `index.html`, style them in `css/styles.css`, and wire event listeners in `main.js`'s `init()` function.
 
@@ -225,8 +226,12 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
-**Adding chart rendering features**: Add rendering logic inside the relevant section's `rebuild()` method (e.g., `PriceChart` for price overlays, `GEXSection` for GEX-related visuals, `VolumeSection` for volume visuals). Use `this.makePlane()` and `this.makeLine()` from `BaseSection`.
+**Adding chart rendering features**: Add rendering logic inside the relevant section's `rebuild()` method (e.g., `PriceChart` for price overlays, `GEXSection` for GEX-related visuals, `VolumeSection` for volume visuals). Use `this.makePlane()`, `this.makeLine()`, or `this.batchPlanes()` from `BaseSection`. For dashed lines, use `THREE.LineDashedMaterial` with `computeLineDistances()`. For batched rectangles (e.g., candles), use `batchPlanes(rects, color)` which merges all rects into a single draw call.
 
 **Volume alert dot**: In `VolumeSection._buildVolumeBars()`, a small orange circle (`COLORS.volumeAlert`) is rendered beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.
 
-**Dealer support/resistance lines**: `PriceChart._buildDealerLevels()` draws two dotted horizontal lines across the candle chart area: a red line (`COLORS.dealerResistance`) at the strike above spot with the highest positive net GEX (resistance), and a green line (`COLORS.dealerSupport`) at the strike below spot with the most negative net GEX (support). Uses a dedicated `dealerLevels` Three.js group.
+**Dealer support/resistance lines**: `PriceChart._buildDealerLevels()` draws two dotted horizontal lines across the candle chart area: a red line (`COLORS.dealerResistance`) at the strike above spot with the highest positive net GEX (resistance), and a green line (`COLORS.dealerSupport`) at the strike below spot with the most negative net GEX (support). Uses a dedicated `dealerLevels` Three.js group. Each line is a single `THREE.Line` with `LineDashedMaterial`.
+- **Batched candle rendering**: `PriceChart._buildCandles()` collects candle body and wick rects into arrays by color (up/down), then calls `batchPlanes()` once per color — 4 draw calls total instead of 2 per candle.
+- **EventBus emit safety**: `emit()` iterates a shallow copy of the listeners array (`[...fns]`) so that listeners removed during emission don't cause skipped callbacks.
+- **CSS.escape in watchlist selectors**: All `querySelector` calls in `watchlist.js` that use dynamic symbol or section names wrap values with `CSS.escape()` to prevent selector injection.
+- **Watchlist PUT validation**: The `PUT /api/watchlist` endpoint validates that each section has a `name` string and `symbols` string array before writing to disk.

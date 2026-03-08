@@ -1,4 +1,3 @@
-import * as THREE from 'three';
 import { COLORS } from './constants.js';
 import { BaseSection } from './BaseSection.js';
 import { bus } from './EventBus.js';
@@ -12,9 +11,7 @@ export class GEXSection extends BaseSection {
     super(container, viewport);
 
     this._addGroup('gexBars');
-    this._highlightGroup = new THREE.Group();
-    this.scene.add(this._highlightGroup);
-    this._highlightedStrike = null;
+    this._initHighlightGroup();
 
     this._labelsOverlay = null;
     this._tooltip = null;
@@ -27,7 +24,6 @@ export class GEXSection extends BaseSection {
       bus.on('interaction:crosshair', (data) => this._onCrosshair(data)),
     ];
 
-    this.startAnimation();
   }
 
   _initOverlays() {
@@ -54,22 +50,35 @@ export class GEXSection extends BaseSection {
     this.render();
   }
 
+  _computeGexMax() {
+    const vp = this.viewport;
+    let maxCallGex = 1, maxPutGex = 1;
+    for (const l of vp.gexLevels) {
+      const ac = Math.abs(l.callGex);
+      const ap = Math.abs(l.putGex);
+      if (ac > maxCallGex) maxCallGex = ac;
+      if (ap > maxPutGex) maxPutGex = ap;
+    }
+    return Math.max(maxCallGex, maxPutGex);
+  }
+
   _buildGEXBars() {
     const vp = this.viewport;
     if (!vp.gexLevels.length) return;
 
-    const maxCallGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.callGex)), 1);
-    const maxPutGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.putGex)), 1);
-    const maxGex = Math.max(maxCallGex, maxPutGex);
+    const maxGex = this._computeGexMax();
     const halfW = this.width / 2;
     const centerX = halfW;
 
     const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
+    const strikeIndex = new Map();
+    for (let i = 0; i < strikes.length; i++) strikeIndex.set(strikes[i], i);
 
     for (const level of vp.gexLevels) {
       const py = this.priceToY(level.strike);
       if (py < this._marginBottom() || py > this.height - this._marginTop()) continue;
-      const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes);
+      const idx = strikeIndex.get(level.strike);
+      const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
 
       if (level.callGex > 0) {
         const w = (level.callGex / maxGex) * halfW;
@@ -92,34 +101,6 @@ export class GEXSection extends BaseSection {
     this.groups.gexBars.add(
       this.makeLine([[0, 0], [0, this.height]], COLORS.separator, 0.6)
     );
-  }
-
-  _gexBarBounds(strike, sortedStrikes) {
-    const idx = sortedStrikes.indexOf(strike);
-    const y = this.priceToY(strike);
-    let top, bottom;
-    if (sortedStrikes.length < 2) return { y, h: 4 };
-    if (idx <= 0) {
-      const nextY = this.priceToY(sortedStrikes[1]);
-      const halfGap = Math.abs(y - nextY) / 2;
-      top = y + halfGap;
-      bottom = y - halfGap;
-    } else if (idx >= sortedStrikes.length - 1) {
-      const prevY = this.priceToY(sortedStrikes[idx - 1]);
-      const halfGap = Math.abs(y - prevY) / 2;
-      top = y + halfGap;
-      bottom = y - halfGap;
-    } else {
-      const prevY = this.priceToY(sortedStrikes[idx - 1]);
-      const nextY = this.priceToY(sortedStrikes[idx + 1]);
-      top = (y + prevY) / 2;
-      bottom = (y + nextY) / 2;
-      if (top < bottom) [top, bottom] = [bottom, top];
-    }
-    const fullH = Math.abs(top - bottom);
-    const inset = Math.min(0.5, fullH * 0.1);
-    const h = Math.max(1, fullH - inset * 2);
-    return { y: bottom + inset, h };
   }
 
   _setupInteraction() {
@@ -177,14 +158,13 @@ export class GEXSection extends BaseSection {
     if (py < this._marginBottom() || py > this.height - this._marginTop()) return;
 
     const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
-    const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes);
+    const idx = strikes.indexOf(level.strike);
+    const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
     const glowPad = Math.max(2, barH * 0.3);
     const glowY = barY - glowPad / 2;
     const glowH = barH + glowPad;
 
-    const maxCallGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.callGex)), 1);
-    const maxPutGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.putGex)), 1);
-    const maxGex = Math.max(maxCallGex, maxPutGex);
+    const maxGex = this._computeGexMax();
     const halfW = this.width / 2;
     const centerX = halfW;
 
@@ -200,44 +180,38 @@ export class GEXSection extends BaseSection {
         this.makePlane(centerX - w, glowY, w, glowH, COLORS.putGex, 0.25)
       );
     }
+    this.render();
   }
 
   clearHighlight() {
     if (this._highlightedStrike === null) return;
     this._highlightedStrike = null;
     this._clearHighlightGroup();
-  }
-
-  _clearHighlightGroup() {
-    while (this._highlightGroup.children.length) {
-      const c = this._highlightGroup.children[0];
-      this._highlightGroup.remove(c);
-      if (c.geometry) c.geometry.dispose();
-      if (c.material) c.material.dispose();
-    }
+    this.render();
   }
 
   _updateLabels() {
     const vp = this.viewport;
     const overlay = this._labelsOverlay;
-    overlay.innerHTML = '';
+    const frag = document.createDocumentFragment();
 
     const gexLabel = document.createElement('div');
     gexLabel.className = 'section-label';
     gexLabel.style.left = '8px';
     gexLabel.textContent = 'CALL / PUT GEX';
-    overlay.appendChild(gexLabel);
+    frag.appendChild(gexLabel);
 
     if (vp.gexLevels.length > 0) {
-      this._addGexScale(overlay);
+      this._addGexScale(frag);
     }
+
+    overlay.innerHTML = '';
+    overlay.appendChild(frag);
   }
 
-  _addGexScale(overlay) {
+  _addGexScale(frag) {
     const vp = this.viewport;
-    const maxCallGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.callGex)), 1);
-    const maxPutGex = Math.max(...vp.gexLevels.map(l => Math.abs(l.putGex)), 1);
-    const maxGex = Math.max(maxCallGex, maxPutGex);
+    const maxGex = this._computeGexMax();
     const halfW = this.width / 2;
     const centerX = halfW;
     const ticks = 3;
@@ -247,7 +221,7 @@ export class GEXSection extends BaseSection {
     zeroLbl.className = 'gex-scale-label';
     zeroLbl.style.left = centerX + 'px';
     zeroLbl.textContent = '0';
-    overlay.appendChild(zeroLbl);
+    frag.appendChild(zeroLbl);
 
     for (let v = scaleStep; v <= maxGex * 1.05; v += scaleStep) {
       const frac = v / maxGex;
@@ -260,7 +234,7 @@ export class GEXSection extends BaseSection {
         rl.style.left = rx + 'px';
         rl.style.color = hexCss(COLORS.callGex);
         rl.textContent = vp.fmtGex(v);
-        overlay.appendChild(rl);
+        frag.appendChild(rl);
       }
 
       const lx = centerX - frac * halfW;
@@ -270,7 +244,7 @@ export class GEXSection extends BaseSection {
         ll.style.left = lx + 'px';
         ll.style.color = hexCss(COLORS.putGex);
         ll.textContent = vp.fmtGex(v);
-        overlay.appendChild(ll);
+        frag.appendChild(ll);
       }
     }
   }

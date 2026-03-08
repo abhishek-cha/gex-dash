@@ -8,9 +8,7 @@ export class VolumeSection extends BaseSection {
     super(container, viewport);
 
     this._addGroup('volumeBars');
-    this._highlightGroup = new THREE.Group();
-    this.scene.add(this._highlightGroup);
-    this._highlightedStrike = null;
+    this._initHighlightGroup();
 
     this._labelsOverlay = null;
     this._initOverlays();
@@ -22,7 +20,6 @@ export class VolumeSection extends BaseSection {
       bus.on('interaction:crosshair', (data) => this._onCrosshair(data)),
     ];
 
-    this.startAnimation();
   }
 
   _setupInteraction() {
@@ -57,18 +54,29 @@ export class VolumeSection extends BaseSection {
     this.render();
   }
 
+  _computeMaxVol() {
+    let maxVol = 1;
+    for (const l of this.viewport.gexLevels) {
+      if (l.totalVolume > maxVol) maxVol = l.totalVolume;
+    }
+    return maxVol;
+  }
+
   _buildVolumeBars() {
     const vp = this.viewport;
     if (!vp.gexLevels.length) return;
 
-    const maxVol = Math.max(...vp.gexLevels.map(l => l.totalVolume), 1);
+    const maxVol = this._computeMaxVol();
     const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
+    const strikeIndex = new Map();
+    for (let i = 0; i < strikes.length; i++) strikeIndex.set(strikes[i], i);
 
     for (const level of vp.gexLevels) {
       if (!level.totalVolume) continue;
       const py = this.priceToY(level.strike);
       if (py < this._marginBottom() || py > this.height - this._marginTop()) continue;
-      const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes);
+      const idx = strikeIndex.get(level.strike);
+      const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
 
       const w = (level.totalVolume / maxVol) * this.width * 0.9;
       this.groups.volumeBars.add(
@@ -90,34 +98,6 @@ export class VolumeSection extends BaseSection {
     this.groups.volumeBars.add(
       this.makeLine([[0, 0], [0, this.height]], COLORS.separator, 0.6)
     );
-  }
-
-  _gexBarBounds(strike, sortedStrikes) {
-    const idx = sortedStrikes.indexOf(strike);
-    const y = this.priceToY(strike);
-    let top, bottom;
-    if (sortedStrikes.length < 2) return { y, h: 4 };
-    if (idx <= 0) {
-      const nextY = this.priceToY(sortedStrikes[1]);
-      const halfGap = Math.abs(y - nextY) / 2;
-      top = y + halfGap;
-      bottom = y - halfGap;
-    } else if (idx >= sortedStrikes.length - 1) {
-      const prevY = this.priceToY(sortedStrikes[idx - 1]);
-      const halfGap = Math.abs(y - prevY) / 2;
-      top = y + halfGap;
-      bottom = y - halfGap;
-    } else {
-      const prevY = this.priceToY(sortedStrikes[idx - 1]);
-      const nextY = this.priceToY(sortedStrikes[idx + 1]);
-      top = (y + prevY) / 2;
-      bottom = (y + nextY) / 2;
-      if (top < bottom) [top, bottom] = [bottom, top];
-    }
-    const fullH = Math.abs(top - bottom);
-    const inset = Math.min(0.5, fullH * 0.1);
-    const h = Math.max(1, fullH - inset * 2);
-    return { y: bottom + inset, h };
   }
 
   _onCrosshair(data) {
@@ -149,52 +129,49 @@ export class VolumeSection extends BaseSection {
     if (!level.totalVolume) return;
 
     const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
-    const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes);
+    const idx = strikes.indexOf(level.strike);
+    const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
     const glowPad = Math.max(2, barH * 0.3);
     const glowY = barY - glowPad / 2;
     const glowH = barH + glowPad;
 
-    const maxVol = Math.max(...vp.gexLevels.map(l => l.totalVolume), 1);
+    const maxVol = this._computeMaxVol();
     const w = (level.totalVolume / maxVol) * this.width * 0.9 + glowPad;
     this._highlightGroup.add(
       this.makePlane(2 - glowPad / 2, glowY, w, glowH, COLORS.volume, 0.25)
     );
+    this.render();
   }
 
   _clearHighlightIfNeeded() {
     if (this._highlightedStrike === null) return;
     this._highlightedStrike = null;
     this._clearHighlightGroup();
-  }
-
-  _clearHighlightGroup() {
-    while (this._highlightGroup.children.length) {
-      const c = this._highlightGroup.children[0];
-      this._highlightGroup.remove(c);
-      if (c.geometry) c.geometry.dispose();
-      if (c.material) c.material.dispose();
-    }
+    this.render();
   }
 
   _updateLabels() {
     const vp = this.viewport;
     const overlay = this._labelsOverlay;
-    overlay.innerHTML = '';
+    const frag = document.createDocumentFragment();
 
     const volLabel = document.createElement('div');
     volLabel.className = 'section-label';
     volLabel.style.left = '4px';
     volLabel.textContent = 'VOLUME';
-    overlay.appendChild(volLabel);
+    frag.appendChild(volLabel);
 
     if (vp.gexLevels.length > 0) {
-      this._addVolumeScale(overlay);
+      this._addVolumeScale(frag);
     }
+
+    overlay.innerHTML = '';
+    overlay.appendChild(frag);
   }
 
-  _addVolumeScale(overlay) {
+  _addVolumeScale(frag) {
     const vp = this.viewport;
-    const maxVol = Math.max(...vp.gexLevels.map(l => l.totalVolume), 1);
+    const maxVol = this._computeMaxVol();
     const ticks = 2;
     const scaleStep = vp.niceStep(maxVol, ticks);
     const usableW = this.width * 0.9;
@@ -204,7 +181,7 @@ export class VolumeSection extends BaseSection {
     zLbl.style.left = '2px';
     zLbl.style.transform = 'none';
     zLbl.textContent = '0';
-    overlay.appendChild(zLbl);
+    frag.appendChild(zLbl);
 
     for (let v = scaleStep; v <= maxVol * 1.05; v += scaleStep) {
       const frac = v / maxVol;
@@ -215,7 +192,7 @@ export class VolumeSection extends BaseSection {
         lbl.className = 'gex-scale-label';
         lbl.style.left = x + 'px';
         lbl.textContent = vp.fmtVol(v);
-        overlay.appendChild(lbl);
+        frag.appendChild(lbl);
       }
     }
   }

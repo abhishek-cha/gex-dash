@@ -31,7 +31,7 @@ function fetchQuoteForSymbol(sym) {
   const es = new EventSource(`/api/stream/${encodeURIComponent(sym)}?types=quote`);
   es.addEventListener('quote', (e) => {
     const data = JSON.parse(e.data);
-    const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+    const row = listEl.querySelector(`.wl-row[data-symbol="${CSS.escape(sym)}"]`);
     if (row) applyQuoteToRow(row, data);
   });
   es.addEventListener('done', (e) => {
@@ -180,7 +180,7 @@ function updateSectionCount(sectionEl) {
 }
 
 function getSectionEl(sectionName) {
-  return listEl.querySelector(`.wl-section[data-section-name="${sectionName}"]`);
+  return listEl.querySelector(`.wl-section[data-section-name="${CSS.escape(sectionName)}"]`);
 }
 
 // --- Context menu ---
@@ -294,7 +294,7 @@ function moveSymbolToSection(sym, targetSectionName) {
   }
 
   // Move DOM: take the row out and append to target section body
-  const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+  const row = listEl.querySelector(`.wl-row[data-symbol="${CSS.escape(sym)}"]`);
   const fromSectionEl = getSectionEl(sections[fromIdx]?.name);
   const toSectionEl = getSectionEl(targetSectionName);
 
@@ -322,7 +322,7 @@ function removeSymbol(sym) {
   sections[si].symbols = sections[si].symbols.filter(s => s !== sym);
 
   // Remove row from DOM
-  const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+  const row = listEl.querySelector(`.wl-row[data-symbol="${CSS.escape(sym)}"]`);
   const sectionEl = getSectionEl(sections[si].name);
   if (row) row.remove();
 
@@ -538,14 +538,14 @@ export function closeWatchlist() {
 }
 
 export function updateWatchlistQuote(sym, quoteData) {
-  const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+  const row = listEl.querySelector(`.wl-row[data-symbol="${CSS.escape(sym)}"]`);
   if (row) applyQuoteToRow(row, quoteData);
 }
 
 export function setActiveSymbol(sym) {
   activeSymbol = sym;
   listEl.querySelectorAll('.wl-row.active').forEach(r => r.classList.remove('active'));
-  const row = listEl.querySelector(`.wl-row[data-symbol="${sym}"]`);
+  const row = listEl.querySelector(`.wl-row[data-symbol="${CSS.escape(sym)}"]`);
   if (row) row.classList.add('active');
   updateAddButton();
 }

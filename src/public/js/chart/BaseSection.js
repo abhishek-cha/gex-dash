@@ -22,7 +22,9 @@ export class BaseSection {
     container.insertBefore(this.renderer.domElement, container.firstChild);
 
     this.groups = {};
-    this._animating = false;
+    this._highlightGroup = null;
+    this._highlightedStrike = null;
+    this._renderScheduled = false;
 
     this._resizeObserver = new ResizeObserver(() => this._onResize());
     this._resizeObserver.observe(this.container);
@@ -46,6 +48,21 @@ export class BaseSection {
 
   _clearAllGroups() {
     for (const g of Object.values(this.groups)) this._clearGroup(g);
+  }
+
+  _initHighlightGroup() {
+    this._highlightGroup = new THREE.Group();
+    this.scene.add(this._highlightGroup);
+  }
+
+  _clearHighlightGroup() {
+    if (!this._highlightGroup) return;
+    while (this._highlightGroup.children.length) {
+      const c = this._highlightGroup.children[0];
+      this._highlightGroup.remove(c);
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+    }
   }
 
   makePlane(x, y, w, h, color, opacity = 1.0) {
@@ -72,6 +89,53 @@ export class BaseSection {
     return new THREE.Line(geo, mat);
   }
 
+  batchPlanes(rects, color, opacity = 1.0) {
+    if (rects.length === 0) return null;
+    const positions = new Float32Array(rects.length * 6 * 3);
+    let i = 0;
+    for (const { x, y, w, h } of rects) {
+      const cx = x + w / 2, cy = y + h / 2;
+      const hw = w / 2, hh = h / 2;
+      positions[i++] = cx - hw; positions[i++] = cy - hh; positions[i++] = 0;
+      positions[i++] = cx + hw; positions[i++] = cy - hh; positions[i++] = 0;
+      positions[i++] = cx + hw; positions[i++] = cy + hh; positions[i++] = 0;
+      positions[i++] = cx - hw; positions[i++] = cy - hh; positions[i++] = 0;
+      positions[i++] = cx + hw; positions[i++] = cy + hh; positions[i++] = 0;
+      positions[i++] = cx - hw; positions[i++] = cy + hh; positions[i++] = 0;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: opacity < 1, opacity });
+    return new THREE.Mesh(geo, mat);
+  }
+
+  _gexBarBounds(strike, sortedStrikes, idx) {
+    const y = this.priceToY(strike);
+    let top, bottom;
+    if (sortedStrikes.length < 2) return { y, h: 4 };
+    if (idx <= 0) {
+      const nextY = this.priceToY(sortedStrikes[1]);
+      const halfGap = Math.abs(y - nextY) / 2;
+      top = y + halfGap;
+      bottom = y - halfGap;
+    } else if (idx >= sortedStrikes.length - 1) {
+      const prevY = this.priceToY(sortedStrikes[idx - 1]);
+      const halfGap = Math.abs(y - prevY) / 2;
+      top = y + halfGap;
+      bottom = y - halfGap;
+    } else {
+      const prevY = this.priceToY(sortedStrikes[idx - 1]);
+      const nextY = this.priceToY(sortedStrikes[idx + 1]);
+      top = (y + prevY) / 2;
+      bottom = (y + nextY) / 2;
+      if (top < bottom) [top, bottom] = [bottom, top];
+    }
+    const fullH = Math.abs(top - bottom);
+    const inset = Math.min(0.5, fullH * 0.1);
+    const h = Math.max(1, fullH - inset * 2);
+    return { y: bottom + inset, h };
+  }
+
   priceToY(price) {
     const vp = this.viewport;
     const range = vp.viewPriceMax - vp.viewPriceMin;
@@ -94,22 +158,12 @@ export class BaseSection {
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  startAnimation() {
-    if (this._animating) return;
-    this._animating = true;
-    const loop = () => {
-      if (!this._animating) return;
-      requestAnimationFrame(loop);
-      this.render();
-    };
-    loop();
-  }
-
-  stopAnimation() {
-    this._animating = false;
+    if (this._renderScheduled) return;
+    this._renderScheduled = true;
+    requestAnimationFrame(() => {
+      this._renderScheduled = false;
+      this.renderer.render(this.scene, this.camera);
+    });
   }
 
   _onResize() {
@@ -128,7 +182,6 @@ export class BaseSection {
   }
 
   dispose() {
-    this.stopAnimation();
     this._resizeObserver.disconnect();
     this.renderer.dispose();
     if (this.renderer.domElement.parentNode) {

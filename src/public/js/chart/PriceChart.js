@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { COLORS, LAYOUT } from './constants.js';
 import { BaseSection } from './BaseSection.js';
 import { bus } from './EventBus.js';
@@ -20,7 +21,6 @@ export class PriceChart extends BaseSection {
       bus.on('interaction:crosshair', (data) => this._onExternalCrosshair(data)),
     ];
 
-    this.startAnimation();
   }
 
   _initOverlays() {
@@ -124,6 +124,8 @@ export class PriceChart extends BaseSection {
     const candleW = (s.candle.width / visibleCount) * (1 - LAYOUT.candleGap);
     const wickW = Math.max(1, candleW * 0.1);
 
+    const upBodies = [], downBodies = [], upWicks = [], downWicks = [];
+
     const drawStart = Math.max(0, Math.floor(vp.viewStartIdx));
     const drawEnd = Math.min(vp.priceData.length, Math.ceil(vp.viewEndIdx));
     for (let i = drawStart; i < drawEnd; i++) {
@@ -131,21 +133,23 @@ export class PriceChart extends BaseSection {
       if (!c) continue;
       const x = this.idxToX(i + 0.5) - candleW / 2;
       const isUp = c.close >= c.open;
-      const color = isUp ? COLORS.candleUp : COLORS.candleDown;
 
       const bodyLow = Math.min(c.open, c.close);
       const bodyHigh = Math.max(c.open, c.close);
       const yLow = this.priceToY(bodyLow);
       const yHigh = this.priceToY(bodyHigh);
       const bodyH = Math.max(yHigh - yLow, 1);
-      this.groups.candles.add(this.makePlane(x, yLow, candleW, bodyH, color));
+      (isUp ? upBodies : downBodies).push({ x, y: yLow, w: candleW, h: bodyH });
 
       const wickYLow = this.priceToY(c.low);
       const wickYHigh = this.priceToY(c.high);
       const wickX = this.idxToX(i + 0.5) - wickW / 2;
-      this.groups.candles.add(
-        this.makePlane(wickX, wickYLow, wickW, wickYHigh - wickYLow, color)
-      );
+      (isUp ? upWicks : downWicks).push({ x: wickX, y: wickYLow, w: wickW, h: wickYHigh - wickYLow });
+    }
+
+    for (const [rects, color] of [[upBodies, COLORS.candleUp], [downBodies, COLORS.candleDown], [upWicks, COLORS.candleUp], [downWicks, COLORS.candleDown]]) {
+      const mesh = this.batchPlanes(rects, color);
+      if (mesh) this.groups.candles.add(mesh);
     }
   }
 
@@ -153,16 +157,20 @@ export class PriceChart extends BaseSection {
     const vp = this.viewport;
     if (!vp.spotPrice) return;
     const y = this.priceToY(vp.spotPrice);
-    const dashLen = 6;
-    const gapLen = 4;
-    for (let x = LAYOUT.marginLeft; x < this.width; x += dashLen + gapLen) {
-      this.groups.overlays.add(
-        this.makeLine(
-          [[x, y], [Math.min(x + dashLen, this.width), y]],
-          COLORS.priceLine, 0.8
-        )
-      );
-    }
+    const geo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(LAYOUT.marginLeft, y, 0),
+      new THREE.Vector3(this.width, y, 0),
+    ]);
+    const mat = new THREE.LineDashedMaterial({
+      color: COLORS.priceLine,
+      dashSize: 6,
+      gapSize: 4,
+      opacity: 0.8,
+      transparent: true,
+    });
+    const line = new THREE.Line(geo, mat);
+    line.computeLineDistances();
+    this.groups.overlays.add(line);
   }
 
   _buildDealerLevels() {
@@ -183,23 +191,27 @@ export class PriceChart extends BaseSection {
       }
     }
 
-    const dashLen = 6;
-    const gapLen = 4;
-    const drawDottedLine = (price, color) => {
+    const drawDashedLine = (price, color) => {
       const y = this.priceToY(price);
       if (y < s.bottom || y > s.top) return;
-      for (let x = s.candle.left; x < s.candle.right; x += dashLen + gapLen) {
-        this.groups.dealerLevels.add(
-          this.makeLine(
-            [[x, y], [Math.min(x + dashLen, s.candle.right), y]],
-            color, 0.6
-          )
-        );
-      }
+      const geo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(s.candle.left, y, 0),
+        new THREE.Vector3(s.candle.right, y, 0),
+      ]);
+      const mat = new THREE.LineDashedMaterial({
+        color,
+        dashSize: 6,
+        gapSize: 4,
+        opacity: 0.6,
+        transparent: true,
+      });
+      const line = new THREE.Line(geo, mat);
+      line.computeLineDistances();
+      this.groups.dealerLevels.add(line);
     };
 
-    if (resistanceStrike) drawDottedLine(resistanceStrike, COLORS.dealerResistance);
-    if (supportStrike) drawDottedLine(supportStrike, COLORS.dealerSupport);
+    if (resistanceStrike) drawDashedLine(resistanceStrike, COLORS.dealerResistance);
+    if (supportStrike) drawDashedLine(supportStrike, COLORS.dealerSupport);
   }
 
   _buildSeparator() {
@@ -219,22 +231,23 @@ export class PriceChart extends BaseSection {
   _updateLabels() {
     const vp = this.viewport;
     const overlay = this._labelsOverlay;
-    overlay.innerHTML = '';
+    const frag = document.createDocumentFragment();
     const s = this.sectionBounds();
 
     const range = vp.viewPriceMax - vp.viewPriceMin;
-    if (range <= 0) return;
-    const step = vp.niceStep(range, 10);
-    const startP = Math.ceil(vp.viewPriceMin / step) * step;
+    if (range > 0) {
+      const step = vp.niceStep(range, 10);
+      const startP = Math.ceil(vp.viewPriceMin / step) * step;
 
-    for (let p = startP; p <= vp.viewPriceMax; p += step) {
-      const y = this.height - this.priceToY(p);
-      const lbl = document.createElement('div');
-      lbl.className = 'price-label';
-      lbl.style.top = y - 6 + 'px';
-      lbl.style.left = s.axis.left + 4 + 'px';
-      lbl.textContent = p.toFixed(p >= 1000 ? 0 : 2);
-      overlay.appendChild(lbl);
+      for (let p = startP; p <= vp.viewPriceMax; p += step) {
+        const y = this.height - this.priceToY(p);
+        const lbl = document.createElement('div');
+        lbl.className = 'price-label';
+        lbl.style.top = y - 6 + 'px';
+        lbl.style.left = s.axis.left + 4 + 'px';
+        lbl.textContent = p.toFixed(p >= 1000 ? 0 : 2);
+        frag.appendChild(lbl);
+      }
     }
 
     if (vp.spotPrice) {
@@ -244,7 +257,7 @@ export class PriceChart extends BaseSection {
       tag.style.top = y - 8 + 'px';
       tag.style.left = s.axis.left + 2 + 'px';
       tag.textContent = vp.spotPrice.toFixed(2);
-      overlay.appendChild(tag);
+      frag.appendChild(tag);
     }
 
     const visCount = vp.viewEndIdx - vp.viewStartIdx;
@@ -260,8 +273,11 @@ export class PriceChart extends BaseSection {
       lbl.style.left = x + 'px';
       const d = c.date;
       lbl.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
-      overlay.appendChild(lbl);
+      frag.appendChild(lbl);
     }
+
+    overlay.innerHTML = '';
+    overlay.appendChild(frag);
   }
 
   // --- Interaction ---

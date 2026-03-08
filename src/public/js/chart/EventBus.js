@@ -19,7 +19,7 @@ export class EventBus {
   emit(event, data) {
     const fns = this._listeners.get(event);
     if (!fns) return;
-    for (const fn of fns) fn(data);
+    for (const fn of [...fns]) fn(data);
   }
 }
 

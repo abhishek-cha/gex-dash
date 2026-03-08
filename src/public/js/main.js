@@ -207,6 +207,7 @@ async function init() {
   document.getElementById('exp-dialog-close').addEventListener('click', closeExpDialog);
   document.getElementById('exp-dialog-apply').addEventListener('click', () => {
     applyExpFilter(state, () => {
+      updateFilterButton();
       if (state.currentSymbol) reloadGEXFiltered();
     });
   });
