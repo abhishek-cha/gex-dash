@@ -59,8 +59,12 @@ function setupBusSubscriptions() {
   bus.on('stream:start', ({ types }) => {
     const priceLoading = document.getElementById('loading-price');
     const gexLoading = document.getElementById('loading-gex');
+    const volLoading = document.getElementById('loading-volume');
     if (types.includes('price')) priceLoading.style.display = 'block';
-    if (types.includes('gex')) gexLoading.style.display = 'block';
+    if (types.includes('gex')) {
+      gexLoading.style.display = 'block';
+      volLoading.style.display = 'block';
+    }
   });
 
   bus.on('done:price', () => {
@@ -69,6 +73,7 @@ function setupBusSubscriptions() {
 
   bus.on('done:gex', () => {
     document.getElementById('loading-gex').style.display = 'none';
+    document.getElementById('loading-volume').style.display = 'none';
     updateFilterButton();
   });
 
@@ -79,11 +84,13 @@ function setupBusSubscriptions() {
   bus.on('stream:end', () => {
     document.getElementById('loading-price').style.display = 'none';
     document.getElementById('loading-gex').style.display = 'none';
+    document.getElementById('loading-volume').style.display = 'none';
   });
 
   bus.on('stream:error', () => {
     document.getElementById('loading-price').style.display = 'none';
     document.getElementById('loading-gex').style.display = 'none';
+    document.getElementById('loading-volume').style.display = 'none';
   });
 
   bus.on('data:quote', ({ symbol, quote }) => {

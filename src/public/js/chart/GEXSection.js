@@ -198,7 +198,7 @@ export class GEXSection extends BaseSection {
     const gexLabel = document.createElement('div');
     gexLabel.className = 'section-label';
     gexLabel.style.left = '8px';
-    gexLabel.textContent = 'CALL / PUT GEX';
+    gexLabel.textContent = 'GEX';
     frag.appendChild(gexLabel);
 
     if (vp.gexLevels.length > 0) {

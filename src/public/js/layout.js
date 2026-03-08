@@ -43,7 +43,6 @@ export class LayoutManager {
         const loadPrice = document.createElement('div');
         loadPrice.id = 'loading-price';
         loadPrice.className = 'section-loading';
-        loadPrice.textContent = 'Loading price...';
         wrap.appendChild(loadPrice);
       }
 
@@ -51,8 +50,14 @@ export class LayoutManager {
         const loadGex = document.createElement('div');
         loadGex.id = 'loading-gex';
         loadGex.className = 'section-loading';
-        loadGex.textContent = 'Loading GEX...';
         wrap.appendChild(loadGex);
+      }
+
+      if (key === 'volume') {
+        const loadVol = document.createElement('div');
+        loadVol.id = 'loading-volume';
+        loadVol.className = 'section-loading';
+        wrap.appendChild(loadVol);
       }
     }
 

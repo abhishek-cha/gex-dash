@@ -157,7 +157,7 @@ export class VolumeSection extends BaseSection {
 
     const volLabel = document.createElement('div');
     volLabel.className = 'section-label';
-    volLabel.style.left = '4px';
+    volLabel.style.left = '8px';
     volLabel.textContent = 'VOLUME';
     frag.appendChild(volLabel);
 
