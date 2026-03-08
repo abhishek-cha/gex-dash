@@ -61,7 +61,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | Price axis | Click + drag up/down | Zoom price scale around click point |
 | Price axis | Double-click | Reset to auto-fit Y |
 | X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
-| Anywhere | Crosshair hover | Tooltip on GEX section shows nearest strike's call/put/net GEX, volume, and OI; hovered bars glow |
+| Any section | Crosshair hover | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, and OI; hovered bars glow |
 
 All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.
 

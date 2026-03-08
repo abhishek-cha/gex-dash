@@ -1,8 +1,25 @@
-import { GEXChart } from './chart/GEXChart.js';
-import { checkAuth, openStream } from './api.js';
+import { LayoutManager } from './layout.js';
+import { bus } from './chart/EventBus.js';
+import { checkAuth, openStream, getPriceParams } from './api.js';
 import { openExpDialog, closeExpDialog, applyExpFilter } from './expDialog.js';
-import { openWatchlist, closeWatchlist, setActiveSymbol } from './watchlist.js';
+import { openWatchlist, closeWatchlist, setActiveSymbol, updateWatchlistQuote } from './watchlist.js';
 import { setupWatchlistResize } from './resize.js';
+
+// --- DOM refs ---
+
+const els = {};
+
+function cacheDOM() {
+  els.hdrSymbol = document.getElementById('hdr-symbol');
+  els.hdrPrice = document.getElementById('hdr-price');
+  els.hdrChange = document.getElementById('hdr-change');
+  els.freqSel = document.getElementById('freq-select');
+  els.rangeSel = document.getElementById('range-select');
+  els.input = document.getElementById('symbol-input');
+  els.loadBtn = document.getElementById('load-btn');
+  els.expFilterBtn = document.getElementById('exp-filter-btn');
+  els.watchlistBtn = document.getElementById('watchlist-btn');
+}
 
 // --- App state ---
 
@@ -12,19 +29,6 @@ const state = {
   selectedExpirations: new Set(),
   activeStream: null,
 
-  updateFilterButton() {
-    const btn = document.getElementById('exp-filter-btn');
-    const count = this.selectedExpirations.size;
-    const total = this.allExpirations.length;
-    if (total === 0) {
-      btn.innerHTML = 'Expirations';
-    } else if (count === total) {
-      btn.innerHTML = `Expirations <span class="badge">${total}</span>`;
-    } else {
-      btn.innerHTML = `Expirations <span class="badge">${count}/${total}</span>`;
-    }
-  },
-
   closeStream() {
     if (this.activeStream) {
       this.activeStream.close();
@@ -33,15 +37,89 @@ const state = {
   },
 };
 
-// --- Chart singleton ---
+// --- Layout ---
 
-let chart = null;
+let layout = null;
 
-function ensureChart() {
-  if (!chart) {
-    chart = new GEXChart(document.getElementById('chart-wrap'));
+function ensureLayout() {
+  if (!layout) {
+    layout = new LayoutManager(document.getElementById('chart-wrap'));
+    layout.init();
   }
-  return chart;
+  return layout;
+}
+
+function currentPriceParams() {
+  return getPriceParams(els.freqSel.value, els.rangeSel.value);
+}
+
+// --- Bus subscribers (DOM side-effects) ---
+
+function setupBusSubscriptions() {
+  bus.on('stream:start', ({ types }) => {
+    const priceLoading = document.getElementById('loading-price');
+    const gexLoading = document.getElementById('loading-gex');
+    if (types.includes('price')) priceLoading.style.display = 'block';
+    if (types.includes('gex')) gexLoading.style.display = 'block';
+  });
+
+  bus.on('done:price', () => {
+    document.getElementById('loading-price').style.display = 'none';
+  });
+
+  bus.on('done:gex', () => {
+    document.getElementById('loading-gex').style.display = 'none';
+    updateFilterButton();
+  });
+
+  bus.on('done:expiration', () => {
+    updateFilterButton();
+  });
+
+  bus.on('stream:end', () => {
+    document.getElementById('loading-price').style.display = 'none';
+    document.getElementById('loading-gex').style.display = 'none';
+  });
+
+  bus.on('stream:error', () => {
+    document.getElementById('loading-price').style.display = 'none';
+    document.getElementById('loading-gex').style.display = 'none';
+  });
+
+  bus.on('data:quote', ({ symbol, quote }) => {
+    const price = quote.price || 0;
+    const change = quote.change || 0;
+    const pctChange = quote.percentChange || 0;
+
+    els.hdrPrice.textContent = '$' + price.toFixed(2);
+    const sign = change >= 0 ? '+' : '';
+    els.hdrChange.textContent = `${sign}${change.toFixed(2)} (${sign}${pctChange.toFixed(2)}%)`;
+    els.hdrChange.className = 'change ' + (change >= 0 ? 'up' : 'down');
+
+    updateWatchlistQuote(symbol, quote);
+  });
+
+  bus.on('data:gex-chunk', (gexData) => {
+    if (gexData.selectedExpirations) {
+      for (const d of gexData.selectedExpirations) state.selectedExpirations.add(d);
+    }
+  });
+
+  bus.on('data:expirations', (expirationDates) => {
+    state.allExpirations = expirationDates;
+  });
+}
+
+function updateFilterButton() {
+  const count = state.selectedExpirations.size;
+  const total = state.allExpirations.length;
+  if (total === 0) {
+    els.expFilterBtn.innerHTML = 'Expirations';
+  } else if (count === total) {
+    els.expFilterBtn.innerHTML = `Expirations <span class="badge">${total}</span>`;
+  } else {
+    els.expFilterBtn.innerHTML = `Expirations <span class="badge">${count}/${total}</span>`;
+  }
 }
 
 // --- Load orchestration ---
@@ -49,46 +127,46 @@ function ensureChart() {
 function loadSymbol(symbol) {
   state.currentSymbol = symbol;
   state.closeStream();
-  const c = ensureChart();
+  const l = ensureLayout();
 
   state.allExpirations = [];
   state.selectedExpirations = new Set();
-  state.updateFilterButton();
+  updateFilterButton();
 
   setActiveSymbol(symbol);
-  document.getElementById('hdr-symbol').textContent = symbol;
-  document.getElementById('hdr-price').textContent = '--';
-  document.getElementById('hdr-change').textContent = '--';
-  document.getElementById('hdr-change').className = 'change';
+  els.hdrSymbol.textContent = symbol;
+  els.hdrPrice.textContent = '--';
+  els.hdrChange.textContent = '--';
+  els.hdrChange.className = 'change';
 
-  c.clearPrice();
-  c.clearGEX();
-  c.rebuild();
+  l.viewport.clearPrice();
+  l.viewport.clearGEX();
+  bus.emit('viewport:change');
 
   state.activeStream = openStream(symbol, {
     types: ['price', 'gex', 'quote', 'expiration'],
-    chart: c,
-    state,
+    viewport: l.viewport,
+    priceParams: currentPriceParams(),
   });
 }
 
 function reloadPrice() {
   state.closeStream();
-  const c = ensureChart();
+  const l = ensureLayout();
   state.activeStream = openStream(state.currentSymbol, {
     types: ['price'],
-    chart: c,
-    state,
+    viewport: l.viewport,
+    priceParams: currentPriceParams(),
   });
 }
 
 function reloadGEXFiltered() {
   state.closeStream();
-  const c = ensureChart();
+  const l = ensureLayout();
   state.activeStream = openStream(state.currentSymbol, {
     types: ['gex', 'quote'],
-    chart: c,
-    state,
+    viewport: l.viewport,
+    priceParams: currentPriceParams(),
     expirations: state.selectedExpirations,
   });
 }
@@ -106,28 +184,26 @@ async function init() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('active');
 
-  const input = document.getElementById('symbol-input');
-  const btn = document.getElementById('load-btn');
-  const freqSel = document.getElementById('freq-select');
-  const rangeSel = document.getElementById('range-select');
+  cacheDOM();
+  setupBusSubscriptions();
 
   const go = () => {
-    const sym = (input.value.trim() || 'AAPL').toUpperCase();
-    input.value = sym;
+    const sym = (els.input.value.trim() || 'AAPL').toUpperCase();
+    els.input.value = sym;
     loadSymbol(sym);
   };
 
-  btn.addEventListener('click', go);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  els.loadBtn.addEventListener('click', go);
+  els.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
 
-  freqSel.addEventListener('change', () => {
+  els.freqSel.addEventListener('change', () => {
     if (state.currentSymbol) reloadPrice();
   });
-  rangeSel.addEventListener('change', () => {
+  els.rangeSel.addEventListener('change', () => {
     if (state.currentSymbol) reloadPrice();
   });
 
-  document.getElementById('exp-filter-btn').addEventListener('click', () => openExpDialog(state));
+  els.expFilterBtn.addEventListener('click', () => openExpDialog(state));
   document.getElementById('exp-dialog-close').addEventListener('click', closeExpDialog);
   document.getElementById('exp-dialog-apply').addEventListener('click', () => {
     applyExpFilter(state, () => {
@@ -145,11 +221,11 @@ async function init() {
   });
 
   const wlSelectCb = (sym) => {
-    input.value = sym;
+    els.input.value = sym;
     loadSymbol(sym);
   };
 
-  document.getElementById('watchlist-btn').addEventListener('click', () => {
+  els.watchlistBtn.addEventListener('click', () => {
     const panel = document.getElementById('watchlist-panel');
     if (panel.classList.contains('open')) {
       closeWatchlist();
@@ -163,7 +239,7 @@ async function init() {
 
   setupWatchlistResize();
 
-  input.value = 'AAPL';
+  els.input.value = 'AAPL';
   go();
 }
 

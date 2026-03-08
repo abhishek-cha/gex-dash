@@ -22,17 +22,20 @@ src/
     ├── css/
     │   └── styles.css     # All CSS styles
     └── js/
-        ├── main.js        # Entry point: init(), app state, event wiring
-        ├── api.js         # API functions: openStream() via EventSource, checkAuth()
+        ├── main.js            # Entry point: init(), app state, event wiring
+        ├── api.js             # API functions: openStream() via EventSource, checkAuth()
+        ├── layout.js          # LayoutManager: creates section containers, manages visibility
         ├── resize.js          # Watchlist sidebar drag-to-resize logic
         ├── expDialog.js       # Expiration filter dialog logic
         ├── watchlist.js       # Watchlist sidebar (sections, SSE quotes, drag-to-reorder, context menu)
         └── chart/
-            ├── constants.js   # COLORS, LAYOUT, FREQ_MAP, RANGE_MAP
-            ├── GEXChart.js    # Core chart class: scene, camera, coordinate transforms, rebuild
-            ├── renderers.js   # Candle, GEX bar, volume bar, grid, separator, price line rendering
-            ├── interaction.js # Mouse drag, zoom, wheel, crosshair, tooltip, bar highlight
-            └── labels.js      # DOM label overlay (price axis, dates, GEX/volume scales)
+            ├── constants.js       # COLORS, LAYOUT, FREQ_MAP, RANGE_MAP
+            ├── EventBus.js        # Pub/sub event bus for decoupled communication
+            ├── ViewportModel.js   # Shared data model: price/GEX data, viewport state, transforms
+            ├── BaseSection.js     # Base class for chart sections: Three.js scene, camera, resize
+            ├── PriceChart.js      # Candlestick chart section: candles, grid, price line, dealer levels, interaction
+            ├── GEXSection.js      # GEX bars section: call/put bars, highlight, tooltip
+            └── VolumeSection.js   # Volume bars section: volume bars, alert dots, highlight
 ```
 
 The frontend uses native ES modules (no build step or bundler). Three.js is loaded via CDN import map.
@@ -74,7 +77,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
   - `gex`: **progressive streaming** — only fetches the 7-day windows that overlap with needed dates (60-day default or explicit filter), sends per-chunk `event: gex` (with `gexLevels` + `selectedExpirations`) as each window resolves via `Promise.race`. Ends with `event: done { type: "gex" }`. GEX is summable per strike so each chunk is independent.
   - `expiration`: single lightweight call to Schwab's `/expirationchain` endpoint (no option chain fetching). Returns all available expiration dates (capped to 2 years) in one `event: expirations`. Ends with `event: done { type: "expiration" }`.
 - Per-type `done` events (`done: { type: "price" | "quote" | "gex" | "expiration" }`) fire as each type completes. A final `done: {}` (no type) signals all types are finished.
-- **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~3 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
+- **Window optimization**: `gex` type filters `buildDateWindows()` to only fetch windows overlapping with the needed date range. For default 60-day, ~9 windows. For explicit filter, only windows containing selected dates (e.g. one date 1.5yr out = 1 window, not 26).
 - Default expiration filter: 60-day cutoff applied per chunk. If `expirations` query param is provided, that explicit filter is used instead.
 - Usage scenarios:
   - Initial symbol load: `?types=price,gex,quote,expiration`
@@ -83,24 +86,53 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 ### Frontend
 
-**`GEXChart` class** (`src/public/js/chart/GEXChart.js`):
-- Orthographic camera, 4-section layout: candle chart, price axis, call/put GEX bars, volume bars.
-- **Data setters never trigger renders.** All rendering is driven by explicit rebuild calls.
-- Key data methods: `loadPriceData()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`, `mergeGEXChunk(gexData)`, `commitGEX()`.
-- **Hot/cold GEX double-buffering**: `mergeGEXChunk(gexData)` accumulates into a cold buffer (`_coldGexLevels`) by summing `callGex`, `putGex`, `netGex`, `totalVolume`, `totalOI` per strike. `commitGEX()` promotes cold to hot (`gexLevels`). Only hot is painted by renderers. This prevents pan/zoom during streaming from painting incomplete GEX. `clearGEX()` clears both buffers.
-- Key render methods: `rebuildPrice()` (grid + candles + overlays), `rebuildGEX()` (GEX bars + volume bars + dealer levels), `rebuild()` (full rebuild, calls both).
-- `highlightStrike()` / `clearHighlight()` manage a dedicated Three.js group that renders semi-transparent glow planes behind the hovered strike's GEX and volume bars.
-- Uses `ResizeObserver` on the container element (not `window.resize`) so the chart resizes correctly when the watchlist sidebar toggles.
-- Rendering delegated to `renderers.js`, interaction to `interaction.js`, labels to `labels.js`.
+**Modular chart architecture**: The chart is split into independent sections, each with its own Three.js canvas, scene, and camera. All sections share a `ViewportModel` for data and viewport state, coordinated via an `EventBus`.
 
-**Chart interactions** (`src/public/js/chart/interaction.js`):
-- `_chartDrag`: click+drag on candle area to pan horizontally (Y auto-fits).
-- `_axisDrag`: click+drag on price axis to zoom Y scale, anchored to click point.
-- `_xAxisDrag`: click+drag on date labels area to zoom X scale, anchored to click point.
-- Double-click on candle area or price axis to reset to auto-fit.
-- `_manualYScale` flag prevents auto-fit from overriding user's Y zoom.
-- Tooltip is shown anchored to the GEX section based on crosshair Y position (nearest strike). Shows call/put/net GEX, volume, and OI. No tooltip on the candle area itself.
-- Crosshair triggers `highlightStrike()` / `clearHighlight()` for glow effect on hovered bars. Colors use `COLORS` constants via a `hexCss()` helper (no hardcoded hex strings).
+**`EventBus`** (`src/public/js/chart/EventBus.js`):
+- Simple pub/sub: `on(event, fn)`, `off(event, fn)`, `emit(event, data)`.
+- Singleton `bus` export used by all components.
+- Key events: `viewport:change` (triggers section rebuilds), `interaction:crosshair` (syncs hover across all sections — any section can emit, all sections subscribe).
+
+**`ViewportModel`** (`src/public/js/chart/ViewportModel.js`):
+- Shared data model owned by `LayoutManager`, passed to all sections.
+- Holds: `priceData`, `gexLevels` (hot), `_coldGexLevels` (cold buffer), `spotPrice`, `viewPriceMin/Max`, `viewStartIdx/EndIdx`.
+- Data methods: `loadPriceData()`, `mergeGEXChunk()`, `commitGEX()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`.
+- `loadPriceData()` emits `viewport:change` via the bus.
+- **Hot/cold GEX double-buffering**: `mergeGEXChunk()` accumulates into cold buffer. `commitGEX()` promotes cold to hot.
+- Utility methods: `nearestGexLevel()`, `niceStep()`, `fmtGex()`, `fmtVol()`.
+
+**`BaseSection`** (`src/public/js/chart/BaseSection.js`):
+- Base class for all chart sections. Creates a Three.js `WebGLRenderer`, `OrthographicCamera`, `Scene`.
+- Manages groups, resize via `ResizeObserver`, animation loop.
+- Provides `makePlane()`, `makeLine()`, `priceToY()`, `yToPrice()` shared by subclasses.
+
+**`PriceChart`** (`src/public/js/chart/PriceChart.js`):
+- Candlestick chart with grid, price axis labels, price line, dealer levels.
+- Owns all mouse interaction: pan, Y-axis zoom, X-axis zoom, wheel zoom, crosshair.
+- Emits `viewport:change` on pan/zoom (updates ViewportModel directly, then emits).
+- Emits `interaction:crosshair` so GEX/Volume sections can show highlights and tooltips.
+- Subscribes to `interaction:crosshair` from other sections: shows horizontal crosshair line and price tag, hides vertical crosshair.
+- Creates its own DOM overlays: labels, crosshair lines (`crosshair-h`, `crosshair-v`), crosshair price tag.
+- Price axis has an opaque background plane (z=0.5) to occlude candles that extend into the axis area during pan.
+
+**`GEXSection`** (`src/public/js/chart/GEXSection.js`):
+- Call/put GEX bars rendered from center (calls right, puts left).
+- Own mouse interaction: mousemove emits `interaction:crosshair` with `{ price, source: 'gex' }`, mouseleave emits `null`.
+- Subscribes to `interaction:crosshair` for highlight glow, tooltip display, and horizontal crosshair line.
+- Tooltip shows strike, call/put/net GEX, volume, OI.
+- Creates its own DOM overlays: labels overlay with GEX scale, horizontal crosshair line (`crosshair-h`).
+
+**`VolumeSection`** (`src/public/js/chart/VolumeSection.js`):
+- Per-strike volume bars with orange alert dots when volume > OI.
+- Own mouse interaction: mousemove emits `interaction:crosshair` with `{ price, source: 'volume' }`, mouseleave emits `null`.
+- Subscribes to `interaction:crosshair` for highlight glow and horizontal crosshair line.
+- Creates its own DOM overlays: labels overlay with volume scale, horizontal crosshair line (`crosshair-h`).
+
+**`LayoutManager`** (`src/public/js/layout.js`):
+- Creates `ViewportModel` and section containers inside `#chart-wrap`.
+- Sections arranged via CSS flexbox: price (flex:1), gex (22%), volume (13%).
+- `toggleSection(key)` shows/hides individual sections.
+- `init()` creates all section DOM wrappers and instantiates components.
 
 **Watchlist sidebar** (`src/public/js/watchlist.js`):
 - Persistent right sidebar panel (TradingView-style), open by default. Toggle via Watchlist button in header.
@@ -111,27 +143,38 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - **Context menu**: right-click a row to move it to an existing section, create a new section, or remove it. Menu positioned with viewport clamping.
 - **Circular + button**: `#wl-add-btn` in the header, visible only when `activeSymbol` is not in any section. Adds to the first section (creates "Watchlist" default section if none exist).
 - **Resizable width**: a drag handle (`#wl-resize-handle`) between `#chart-wrap` and `#watchlist-panel` allows resizing (180–340px). Below 280px the panel gets a `.compact` class that hides Change and Change% columns via CSS.
-- **Quote sync from chart stream**: when the main chart stream's quote arrives, `api.js` calls `updateWatchlistQuote(sym, data)` to push the fresher quote into the watchlist row (if it exists), keeping it in sync without waiting for the independent per-symbol SSE stream.
+- **Quote sync from chart stream**: when the main chart stream's quote arrives, `api.js` emits `data:quote` on the bus. `main.js`'s `setupBusSubscriptions()` handles this event and calls `updateWatchlistQuote(sym, data)` to push the fresher quote into the watchlist row (if it exists), keeping it in sync without waiting for the independent per-symbol SSE stream.
 - **Toggle indicator**: Watchlist button gets `.active` class when panel is open.
 - Exports: `openWatchlist(selectCb)`, `closeWatchlist()`, `setActiveSymbol(sym)`, `updateWatchlistQuote(sym, quoteData)`.
 
-**App state** (`src/public/js/main.js`):
+**App state & DOM side-effects** (`src/public/js/main.js`):
 - `state.currentSymbol`: currently loaded ticker.
 - `state.allExpirations`: all available expiration dates (grows as stream delivers).
 - `state.selectedExpirations`: Set of currently selected dates for GEX filter.
 - `state.activeStream`: current `EventSource` instance (closed before opening a new one).
+- `cacheDOM()`: caches header element refs (`hdrSymbol`, `hdrPrice`, `hdrChange`, `freqSel`, `rangeSel`, etc.).
+- `setupBusSubscriptions()`: subscribes to all bus events for DOM side-effects:
+  - `stream:start` / `stream:end` / `stream:error`: show/hide loading indicators.
+  - `done:price` / `done:gex` / `done:expiration`: hide loading, update filter button badge.
+  - `data:quote`: updates header price/change display, syncs watchlist row via `updateWatchlistQuote()`.
+  - `data:gex-chunk`: unions `selectedExpirations` into `state.selectedExpirations`.
+  - `data:expirations`: updates `state.allExpirations`.
+- `currentPriceParams()`: reads freq/range DOM selects and returns params for `openStream()`.
+- `loadSymbol()` / `reloadPrice()` / `reloadGEXFiltered()`: orchestrate stream lifecycle.
 
 **API layer** (`src/public/js/api.js`):
-- `openStream(symbol, { types, chart, state, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types`. Uses epoch-based stale detection (`_activeStreamId`) to discard events from superseded streams. Clears GEX data when a new stream requests GEX. Attaches typed event listeners:
+- Pure data layer — no DOM manipulation, no imports from watchlist or UI modules.
+- `openStream(symbol, { types, viewport, priceParams, expirations? })`: opens an `EventSource` to `/api/stream/:symbol` with the specified `types` and `priceParams`. Uses epoch-based stale detection (`_activeStreamId`) to discard events from superseded streams. Attaches typed event listeners:
   - `price` / `quote`: buffer data silently (no render).
-  - `gex`: calls `chart.mergeGEXChunk()` to accumulate into cold buffer. Unions `selectedExpirations` into state.
-  - `expirations`: updates `state.allExpirations`.
-  - `done { type: "price" }`: if GEX is also streaming, `rebuildPrice()` only (avoids partial GEX render); otherwise `rebuild()` to reposition existing GEX bars on the new price scale.
-  - `done { type: "quote" }`: `applyQuote()` updates header + `setSpotPrice()`, `updateWatchlistQuote()` syncs the watchlist row, then `buildPriceLine()` draws the spot line.
-  - `done { type: "gex" }`: `commitGEX()` promotes cold to hot, then `rebuildGEX()`.
-  - `done {}` (no type): final signal, closes the EventSource.
-  - `error`: hides loading indicators, closes stream.
-- `applyQuote(quoteData, chart)`: updates the header price/change display and calls `chart.setSpotPrice()`.
+  - `gex`: calls `viewport.mergeGEXChunk()` to accumulate into cold buffer. Emits `data:gex-chunk`.
+  - `expirations`: emits `data:expirations` with expiration dates.
+  - `done { type: "price" }`: calls `viewport.loadPriceData()` which emits `viewport:change` — all sections rebuild automatically. Emits `done:price`.
+  - `done { type: "quote" }`: calls `viewport.setSpotPrice()`, emits `data:quote` with symbol and quote data, then emits `viewport:change`.
+  - `done { type: "gex" }`: `viewport.commitGEX()` promotes cold to hot, emits `viewport:change`, then emits `done:gex`.
+  - `done { type: "expiration" }`: emits `done:expiration`.
+  - `done {}` (no type): emits `stream:end`, closes the EventSource.
+  - `error`: emits `stream:error`, closes stream.
+- `getPriceParams(freqVal, rangeVal)`: takes frequency and range values (not DOM elements) and returns params object.
 - `checkAuth()`: checks `/auth/status`.
 
 ## Development Commands
@@ -155,20 +198,24 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 ## Important Patterns
 
 - **No frontend build step**: frontend uses native ES module `.js` files. Three.js is loaded via CDN import map in `index.html`.
-- **SSE streaming with progressive GEX**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). GEX is streamed progressively — option chains are fetched in 14-day windows, and each chunk's GEX is sent as it resolves. The client accumulates GEX per strike (GEX is summable: `|gamma| * OI * 100 * spot`). Per-type `done` events (`done: { type }`) signal when each data type is complete, enabling targeted renders. The final `done: {}` (no type) closes the stream.
-- **Separation of data and rendering**: `GEXChart` data setters (`loadPriceData`, `setSpotPrice`, `mergeGEXChunk`, `clearGEX`) never trigger renders. Only `done` event handlers call `rebuildPrice()` or `rebuildGEX()`. GEX uses hot/cold double-buffering: chunks accumulate in cold (`_coldGexLevels`), `commitGEX()` promotes to hot (`gexLevels`) before painting. This prevents pan/zoom during streaming from rendering incomplete GEX.
+- **SSE streaming with progressive GEX**: `src/routes/stream.ts` uses Server-Sent Events (`text/event-stream`) with typed events (`price`, `quote`, `gex`, `expirations`, `done`, `error`). GEX is streamed progressively — option chains are fetched in 7-day windows, and each chunk's GEX is sent as it resolves. The client accumulates GEX per strike (GEX is summable: `|gamma| * OI * 100 * spot`). Per-type `done` events (`done: { type }`) signal when each data type is complete, enabling targeted renders. The final `done: {}` (no type) closes the stream.
+- **Modular chart sections**: The chart is split into `PriceChart`, `GEXSection`, and `VolumeSection`, each with its own Three.js canvas and scene. All share a `ViewportModel` for data and viewport state, coordinated via an `EventBus` with `viewport:change` events. Sections rebuild independently when the viewport changes.
+- **Separation of data and rendering**: `ViewportModel` data setters (`loadPriceData`, `setSpotPrice`, `mergeGEXChunk`, `clearGEX`) don't directly trigger renders. `loadPriceData()` emits `viewport:change`; other mutations require explicit `bus.emit('viewport:change')` in the calling code. GEX uses hot/cold double-buffering: chunks accumulate in cold (`_coldGexLevels`), `commitGEX()` promotes to hot (`gexLevels`) before painting. This prevents pan/zoom during streaming from rendering incomplete GEX.
 - **Expiration filter default**: the server computes a 60-day cutoff per chunk and returns `selectedExpirations` in each `gex` event payload. The client unions these additively — no duplicated logic.
 - **Token persistence**: tokens are saved to `.tokens.json` and reloaded on restart so the user doesn't need to re-authenticate.
 - **Self-signed TLS**: `ensureCerts()` in `src/certs.ts` generates certs on first run if missing. Required because Schwab OAuth mandates HTTPS callback URLs.
-- **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream. The main chart quote also syncs to the watchlist row via `updateWatchlistQuote()`.
+- **Watchlist persistence**: sections are stored in `watchlist.json` (gitignored) as `[{ name, symbols }]` via REST endpoints in `src/routes/watchlist.ts`. The frontend sidebar (`watchlist.js`) uses targeted DOM mutations — no full re-renders after initial open. Per-symbol SSE quote streams are independent of the main chart stream. The main chart quote syncs to the watchlist row via the `data:quote` bus event handled in `main.js`.
 - **Watchlist resize**: `resize.js` adds drag-to-resize on the `#wl-resize-handle` element between chart and sidebar (180–340px range). A `ResizeObserver` on the panel toggles a `.compact` CSS class below 280px, hiding the Change/Change% columns.
-- **ResizeObserver for chart**: `GEXChart` uses `new ResizeObserver().observe(container)` instead of `window.resize` so the chart properly resizes when the watchlist sidebar is toggled or resized (sidebar changes container width but doesn't fire `window.resize`).
+- **ResizeObserver per section**: Each chart section (`BaseSection`) uses its own `ResizeObserver` on its container element. When the watchlist sidebar toggles or resizes, the CSS flexbox reflows section widths and each section auto-rebuilds.
+- **EventBus for decoupling**: Components communicate via `bus.emit()`/`bus.on()` instead of direct method calls. `viewport:change` triggers all section rebuilds. `interaction:crosshair` syncs hover highlights bidirectionally across all sections — PriceChart, GEXSection, and VolumeSection each emit crosshair events on mousemove and subscribe to events from other sections, showing a horizontal crosshair line at the corresponding price.
 
 ## Common Modification Patterns
 
 **Adding a new API endpoint**: For new data types, add a handler in `src/routes/stream.ts` and register a new `types` value. For non-streaming endpoints, create a new route file in `src/routes/`. Use the `getSchwabAuth()` pattern to get the auth instance. Register the route in `src/server.ts`.
 
-**Changing the chart layout**: Modify `LAYOUT` constants (e.g. `gexSectionRatio`, `volumeSectionRatio`) in `src/public/js/chart/constants.js` and `_sectionBounds()` in `GEXChart.js`.
+**Changing section sizes**: Modify CSS classes `.section-gex` (width %) and `.section-volume` (width %) in `css/styles.css`. Price section is `flex: 1` and fills remaining space.
+
+**Adding a new chart section**: Create a new class extending `BaseSection`. Subscribe to `viewport:change` in the constructor. Add a container in `LayoutManager.init()` and register the section in `_sectionOrder`.
 
 **Adding new UI controls**: Add HTML elements inside `<div id="header">` in `index.html`, style them in `css/styles.css`, and wire event listeners in `main.js`'s `init()` function.
 
@@ -178,8 +225,8 @@ Server runs at `https://127.0.0.1:3000` (HTTPS required for Schwab OAuth). Self-
 
 **Adjusting the default expiration filter**: Change the `60` (days) in `src/routes/stream.ts`'s `streamGEX()`. The client receives `selectedExpirations` from the server and applies it directly.
 
-**Adding chart rendering features**: Add render functions in `src/public/js/chart/renderers.js` and call them from the appropriate rebuild method (`rebuildPrice()`, `rebuildGEX()`, or `rebuild()`) in `GEXChart.js`.
+**Adding chart rendering features**: Add rendering logic inside the relevant section's `rebuild()` method (e.g., `PriceChart` for price overlays, `GEXSection` for GEX-related visuals, `VolumeSection` for volume visuals). Use `this.makePlane()` and `this.makeLine()` from `BaseSection`.
 
-**Volume alert dot**: In `renderers.js`, `buildVolumeBars()` renders a small orange circle (`COLORS.volumeAlert`) beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.
+**Volume alert dot**: In `VolumeSection._buildVolumeBars()`, a small orange circle (`COLORS.volumeAlert`) is rendered beside volume bars where `totalVolume > totalOI` (both must be > 0). This signals unusual activity at that strike.
 
-**Dealer support/resistance lines**: `buildDealerLevels()` in `renderers.js` draws two dotted horizontal lines across the candle chart area: a red line (`COLORS.dealerResistance`) at the strike above spot with the highest positive net GEX (resistance), and a green line (`COLORS.dealerSupport`) at the strike below spot with the most negative net GEX (support). Uses a dedicated `dealerLevels` Three.js group, cleared in `rebuildGEX()` and `rebuild()`.
+**Dealer support/resistance lines**: `PriceChart._buildDealerLevels()` draws two dotted horizontal lines across the candle chart area: a red line (`COLORS.dealerResistance`) at the strike above spot with the highest positive net GEX (resistance), and a green line (`COLORS.dealerSupport`) at the strike below spot with the most negative net GEX (support). Uses a dedicated `dealerLevels` Three.js group.

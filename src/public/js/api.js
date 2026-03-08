@@ -1,6 +1,5 @@
 import { FREQ_MAP, RANGE_MAP } from './chart/constants.js';
-import { buildPriceLine } from './chart/renderers.js';
-import { updateWatchlistQuote } from './watchlist.js';
+import { bus } from './chart/EventBus.js';
 
 export async function checkAuth() {
   const res = await fetch('/auth/status');
@@ -8,9 +7,7 @@ export async function checkAuth() {
   return data.authenticated;
 }
 
-export function getPriceParams() {
-  const freqVal = document.getElementById('freq-select').value;
-  const rangeVal = document.getElementById('range-select').value;
+export function getPriceParams(freqVal, rangeVal) {
   const freq = FREQ_MAP[freqVal] || FREQ_MAP['1D'];
   const range = RANGE_MAP[rangeVal] || RANGE_MAP['1Y'];
 
@@ -24,52 +21,18 @@ export function getPriceParams() {
   return { ...freq, ...range };
 }
 
-export function applyQuote(quoteData, chart) {
-  const price = quoteData.price || 0;
-  const change = quoteData.change || 0;
-  const pctChange = quoteData.percentChange || 0;
-
-  document.getElementById('hdr-price').textContent = '$' + price.toFixed(2);
-  const changeEl = document.getElementById('hdr-change');
-  const sign = change >= 0 ? '+' : '';
-  changeEl.textContent = `${sign}${change.toFixed(2)} (${sign}${pctChange.toFixed(2)}%)`;
-  changeEl.className = 'change ' + (change >= 0 ? 'up' : 'down');
-
-  chart.setSpotPrice(price);
-}
-
-/**
- * Opens an SSE stream to /api/stream/:symbol.
- *
- * @param {string} symbol
- * @param {{
- *   types: string[],
- *   chart: object,
- *   state: object,
- *   expirations?: Set<string>
- * }} opts
- * @returns {EventSource}
- */
 let _activeStreamId = 0;
 
-export function openStream(symbol, { types, chart, state, expirations }) {
+export function openStream(symbol, { types, viewport, priceParams, expirations }) {
   const streamId = _activeStreamId = Date.now();
   const stale = () => streamId !== _activeStreamId;
 
-  const qs = new URLSearchParams({ types: types.join(','), ...getPriceParams() });
+  const qs = new URLSearchParams({ types: types.join(','), ...priceParams });
   if (expirations && expirations.size > 0) {
     qs.set('expirations', [...expirations].join(','));
   }
 
-  const priceLoading = document.getElementById('loading-price');
-  const gexLoading = document.getElementById('loading-gex');
-  const wantsPrice = types.includes('price');
-  const wantsGex = types.includes('gex');
-
-  if (wantsPrice) priceLoading.style.display = 'block';
-  if (wantsGex) {
-    gexLoading.style.display = 'block';
-  }
+  bus.emit('stream:start', { types });
 
   const es = new EventSource(`/api/stream/${encodeURIComponent(symbol)}?${qs}`);
 
@@ -89,17 +52,15 @@ export function openStream(symbol, { types, chart, state, expirations }) {
   es.addEventListener('gex', (e) => {
     if (stale()) return;
     const gexData = JSON.parse(e.data);
-    chart.mergeGEXChunk(gexData);
-    if (gexData.selectedExpirations) {
-      for (const d of gexData.selectedExpirations) state.selectedExpirations.add(d);
-    }
+    viewport.mergeGEXChunk(gexData);
+    bus.emit('data:gex-chunk', gexData);
   });
 
   es.addEventListener('expirations', (e) => {
     if (stale()) return;
     const data = JSON.parse(e.data);
     if (data.expirationDates) {
-      state.allExpirations = data.expirationDates;
+      bus.emit('data:expirations', data.expirationDates);
     }
   });
 
@@ -107,36 +68,29 @@ export function openStream(symbol, { types, chart, state, expirations }) {
     if (stale()) return;
     const data = JSON.parse(e.data);
     if (data.type === 'price' && pendingPrice) {
-      priceLoading.style.display = 'none';
-      chart.loadPriceData(pendingPrice);
+      viewport.loadPriceData(pendingPrice);
       pendingPrice = null;
-      // If GEX is also streaming, only rebuild price — GEX will
-      // reposition on its own done event using the updated scale.
-      // Otherwise rebuild everything so existing GEX bars match the new scale.
-      wantsGex ? chart.rebuildPrice() : chart.rebuild();
+      bus.emit('done:price');
     } else if (data.type === 'quote' && pendingQuote) {
-      applyQuote(pendingQuote, chart);
-      updateWatchlistQuote(symbol, pendingQuote);
+      viewport.setSpotPrice(pendingQuote.price || 0);
+      bus.emit('data:quote', { symbol, quote: pendingQuote });
+      bus.emit('viewport:change');
       pendingQuote = null;
-      buildPriceLine(chart);
     } else if (data.type === 'gex') {
-      gexLoading.style.display = 'none';
-      chart.commitGEX();
-      chart.rebuildGEX();
-      state.updateFilterButton();
+      viewport.commitGEX();
+      bus.emit('viewport:change');
+      bus.emit('done:gex');
     } else if (data.type === 'expiration') {
-      state.updateFilterButton();
+      bus.emit('done:expiration');
     } else if (!data.type) {
-      priceLoading.style.display = 'none';
-      gexLoading.style.display = 'none';
+      bus.emit('stream:end');
       es.close();
     }
   });
 
   es.addEventListener('error', () => {
     if (stale()) return;
-    priceLoading.style.display = 'none';
-    gexLoading.style.display = 'none';
+    bus.emit('stream:error');
     es.close();
   });
 
