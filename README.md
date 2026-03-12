@@ -7,7 +7,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 ## Features
 
 - **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates
-- **Cumulative net GEX line** — Amber line showing cumulative net GEX across strikes, with bottom-up/top-down splice at the gamma flip point nearest spot price
+- **Cumulative net GEX line** — Amber line showing cumulative net GEX radiating outward from spot price (upward to highest strike, downward to lowest strike)
 - **Total GEX** — Sum of all net GEX displayed in the header bar with green (positive) or red (negative) badge
 - **Dealer levels** — Red (resistance) and green (support) dotted lines drawn on the candlestick chart at key GEX strikes
 - **Volume & OI overlay** — Per-strike options volume with orange flags where volume exceeds open interest
@@ -128,7 +128,7 @@ Net  GEX = Call GEX + Put GEX
 
 GEX is aggregated per strike price across all selected expiration dates. Total options volume and open interest are also aggregated per strike. Positive net GEX at a strike implies dealer hedging activity that dampens price movement (a "pin"), while negative net GEX implies amplification. Strikes where volume exceeds open interest are flagged with an orange dot.
 
-A **cumulative net GEX line** (amber) is drawn over the GEX bars. It computes cumulative sums from both directions (bottom-up and top-down), finds the "flip point" — the strike nearest spot where the cumulative sum changes sign — and splices: bottom-up below the flip, top-down above. When total net GEX is positive, bottom-up is used to find the flip (top-down would never go negative); when negative, top-down is used (bottom-up would never go positive). The flip point represents the gamma exposure transition zone.
+A **cumulative net GEX line** (amber) is drawn over the GEX bars. It starts at the strike nearest spot price (seeded with that strike's net GEX) and accumulates net GEX outward in both directions — upward to the highest strike and downward to the lowest strike. This shows how net gamma exposure builds up as price moves away from spot.
 
 Two dealer level lines are drawn across the candlestick chart: a **red dotted line** at the strike above spot with the highest positive net GEX (dealer resistance), and a **green dotted line** at the strike below spot with the most negative net GEX (dealer support).
 

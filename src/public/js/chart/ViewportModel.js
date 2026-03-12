@@ -148,42 +148,28 @@ export class ViewportModel {
       return;
     }
 
-    // Bottom-up cumulative (lowest strike → highest)
-    const bottomUp = new Array(n);
-    bottomUp[0] = sorted[0].netGex;
-    for (let i = 1; i < n; i++) bottomUp[i] = bottomUp[i - 1] + sorted[i].netGex;
-
-    // Top-down cumulative (highest strike → lowest)
-    const topDown = new Array(n);
-    topDown[n - 1] = sorted[n - 1].netGex;
-    for (let i = n - 2; i >= 0; i--) topDown[i] = topDown[i + 1] + sorted[i].netGex;
-
-    // Find flip point: sign change closest to spot price
-    const totalNet = bottomUp[n - 1];
-    const cum = totalNet >= 0 ? bottomUp : topDown;
     const spot = this.spotPrice || 0;
-    let flipIdx = -1;
+
+    // Find the strike nearest to spot
+    let spotIdx = 0;
     let bestDist = Infinity;
-    for (let i = 1; i < n; i++) {
-      if ((cum[i - 1] >= 0 && cum[i] < 0) || (cum[i - 1] < 0 && cum[i] >= 0)) {
-        const idx = Math.abs(cum[i - 1]) <= Math.abs(cum[i]) ? i - 1 : i;
-        const dist = Math.abs(sorted[idx].strike - spot);
-        if (dist < bestDist) { bestDist = dist; flipIdx = idx; }
-      }
-    }
-    if (flipIdx === -1) {
-      flipIdx = 0;
-      let minAbs = Math.abs(cum[0]);
-      for (let i = 1; i < n; i++) {
-        const a = Math.abs(cum[i]);
-        if (a < minAbs) { minAbs = a; flipIdx = i; }
-      }
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(sorted[i].strike - spot);
+      if (d < bestDist) { bestDist = d; spotIdx = i; }
     }
 
-    // Splice: bottom-up below flip, top-down above flip
     const combined = new Array(n);
-    for (let i = 0; i <= flipIdx; i++) combined[i] = bottomUp[i];
-    for (let i = flipIdx + 1; i < n; i++) combined[i] = topDown[i];
+    combined[spotIdx] = sorted[spotIdx].netGex;
+
+    // Cumulative from spot upward (spot+1 to highest strike)
+    for (let i = spotIdx + 1; i < n; i++) {
+      combined[i] = combined[i - 1] + sorted[i].netGex;
+    }
+
+    // Cumulative from spot downward (spot-1 to lowest strike)
+    for (let i = spotIdx - 1; i >= 0; i--) {
+      combined[i] = combined[i + 1] + sorted[i].netGex;
+    }
 
     this.combinedCumulative = combined;
 

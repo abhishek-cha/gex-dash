@@ -120,7 +120,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`GEXSection`** (`src/public/js/chart/GEXSection.js`):
 - Pure renderer — all data computation lives in `ViewportModel._postProcessGEX()`. Reads pre-computed `vp.sortedStrikes`, `vp.strikeIndex`, `vp.sortedLevels`, `vp.gexMax`, `vp.combinedCumulative`, `vp.cumulativeMap`, `vp.maxCumulativeAbs`.
 - Call/put GEX bars rendered from center (calls right, puts left).
-- **Cumulative net GEX line**: amber line overlaid on the GEX bars showing cumulative net GEX across strikes (data computed in ViewportModel).
+- **Cumulative net GEX line**: amber line overlaid on the GEX bars showing cumulative net GEX radiating outward from spot price — upward to highest strike, downward to lowest (data computed in ViewportModel).
 - Own mouse interaction: mousemove emits `interaction:crosshair` with `{ price, source: 'gex' }`, mouseleave emits `null`.
 - Subscribes to `interaction:crosshair` for highlight glow, tooltip display, and horizontal crosshair line.
 - Tooltip shows strike, call/put/net GEX, volume, OI, and cumulative GEX.
