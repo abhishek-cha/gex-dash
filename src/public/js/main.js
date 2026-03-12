@@ -17,6 +17,8 @@ function cacheDOM() {
   els.rangeSel = document.getElementById('range-select');
   els.input = document.getElementById('symbol-input');
   els.loadBtn = document.getElementById('load-btn');
+  els.hdrTotalGex = document.getElementById('hdr-total-gex');
+  els.hdrTotalGexVal = document.getElementById('hdr-total-gex-val');
   els.expFilterBtn = document.getElementById('exp-filter-btn');
   els.watchlistBtn = document.getElementById('watchlist-btn');
 }
@@ -75,6 +77,7 @@ function setupBusSubscriptions() {
     document.getElementById('loading-gex').style.display = 'none';
     document.getElementById('loading-volume').style.display = 'none';
     updateFilterButton();
+    updateTotalGex();
   });
 
   bus.on('done:expiration', () => {
@@ -129,6 +132,19 @@ function updateFilterButton() {
   }
 }
 
+function updateTotalGex() {
+  const vp = layout && layout.viewport;
+  if (!vp || !vp.gexLevels.length) {
+    els.hdrTotalGexVal.textContent = '--';
+    els.hdrTotalGex.className = 'total-gex';
+    return;
+  }
+  let total = 0;
+  for (const l of vp.gexLevels) total += l.netGex;
+  els.hdrTotalGexVal.textContent = vp.fmtGex(total);
+  els.hdrTotalGex.className = 'total-gex ' + (total >= 0 ? 'positive' : 'negative');
+}
+
 // --- Load orchestration ---
 
 function loadSymbol(symbol) {
@@ -143,8 +159,10 @@ function loadSymbol(symbol) {
   setActiveSymbol(symbol);
   els.hdrSymbol.textContent = symbol;
   els.hdrPrice.textContent = '--';
-  els.hdrChange.textContent = '--';
+  els.hdrChange.textContent = '-- (--%)';
   els.hdrChange.className = 'change';
+  els.hdrTotalGexVal.textContent = '--';
+  els.hdrTotalGex.className = 'total-gex';
 
   l.viewport.clearPrice();
   l.viewport.clearGEX();

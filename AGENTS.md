@@ -34,7 +34,7 @@ src/
             ├── ViewportModel.js   # Shared data model: price/GEX data, viewport state, transforms
             ├── BaseSection.js     # Base class for chart sections: Three.js scene, camera, resize
             ├── PriceChart.js      # Candlestick chart section: candles, grid, price line, dealer levels, interaction
-            ├── GEXSection.js      # GEX bars section: call/put bars, highlight, tooltip
+            ├── GEXSection.js      # GEX bars section: call/put bars, cumulative line, highlight, tooltip
             └── VolumeSection.js   # Volume bars section: volume bars, alert dots, highlight
 ```
 
@@ -96,9 +96,10 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`ViewportModel`** (`src/public/js/chart/ViewportModel.js`):
 - Shared data model owned by `LayoutManager`, passed to all sections.
 - Holds: `priceData`, `gexLevels` (hot), `_coldGexLevels` (cold buffer), `spotPrice`, `viewPriceMin/Max`, `viewStartIdx/EndIdx`.
+- **Derived GEX data**: `sortedStrikes`, `strikeIndex`, `sortedLevels`, `gexMax`, `combinedCumulative`, `cumulativeMap`, `maxCumulativeAbs` — computed once on `commitGEX()` via `_postProcessGEX()`, cleared on `clearGEX()`.
 - Data methods: `loadPriceData()`, `mergeGEXChunk()`, `commitGEX()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`.
 - `loadPriceData()` emits `viewport:change` via the bus.
-- **Hot/cold GEX double-buffering**: `mergeGEXChunk()` accumulates into cold buffer. `commitGEX()` promotes cold to hot.
+- **Hot/cold GEX double-buffering**: `mergeGEXChunk()` accumulates into cold buffer. `commitGEX()` promotes cold to hot, then runs `_postProcessGEX()` to compute all derived data before any events fire.
 - Utility methods: `nearestGexLevel()`, `niceStep()`, `fmtGex()`, `fmtVol()`.
 
 **`BaseSection`** (`src/public/js/chart/BaseSection.js`):
@@ -117,10 +118,12 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - Price axis has an opaque background plane (z=0.5) to occlude candles that extend into the axis area during pan.
 
 **`GEXSection`** (`src/public/js/chart/GEXSection.js`):
+- Pure renderer — all data computation lives in `ViewportModel._postProcessGEX()`. Reads pre-computed `vp.sortedStrikes`, `vp.strikeIndex`, `vp.sortedLevels`, `vp.gexMax`, `vp.combinedCumulative`, `vp.cumulativeMap`, `vp.maxCumulativeAbs`.
 - Call/put GEX bars rendered from center (calls right, puts left).
+- **Cumulative net GEX line**: amber line overlaid on the GEX bars showing cumulative net GEX across strikes (data computed in ViewportModel).
 - Own mouse interaction: mousemove emits `interaction:crosshair` with `{ price, source: 'gex' }`, mouseleave emits `null`.
 - Subscribes to `interaction:crosshair` for highlight glow, tooltip display, and horizontal crosshair line.
-- Tooltip shows strike, call/put/net GEX, volume, OI.
+- Tooltip shows strike, call/put/net GEX, volume, OI, and cumulative GEX.
 - Creates its own DOM overlays: labels overlay with GEX scale, horizontal crosshair line (`crosshair-h`).
 
 **`VolumeSection`** (`src/public/js/chart/VolumeSection.js`):
@@ -154,13 +157,14 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - `state.allExpirations`: all available expiration dates (grows as stream delivers).
 - `state.selectedExpirations`: Set of currently selected dates for GEX filter.
 - `state.activeStream`: current `EventSource` instance (closed before opening a new one).
-- `cacheDOM()`: caches header element refs (`hdrSymbol`, `hdrPrice`, `hdrChange`, `freqSel`, `rangeSel`, etc.).
+- `cacheDOM()`: caches header element refs (`hdrSymbol`, `hdrPrice`, `hdrChange`, `hdrTotalGex`, `hdrTotalGexVal`, `freqSel`, `rangeSel`, etc.).
 - `setupBusSubscriptions()`: subscribes to all bus events for DOM side-effects:
   - `stream:start` / `stream:end` / `stream:error`: show/hide loading indicators.
-  - `done:price` / `done:gex` / `done:expiration`: hide loading, update filter button badge.
+  - `done:price` / `done:gex` / `done:expiration`: hide loading, update filter button badge. `done:gex` also calls `updateTotalGex()`.
   - `data:quote`: updates header price/change display, syncs watchlist row via `updateWatchlistQuote()`.
   - `data:gex-chunk`: unions `selectedExpirations` into `state.selectedExpirations`.
   - `data:expirations`: updates `state.allExpirations`.
+- `updateTotalGex()`: sums all `netGex` from `viewport.gexLevels`, updates `#hdr-total-gex-val` with formatted total. The label "Total GEX" is static HTML; JS only sets the value and toggles the `positive`/`negative` class for green/red background (grey default). Reset to `--` on symbol change.
 - `currentPriceParams()`: reads freq/range DOM selects and returns params for `openStream()`.
 - `loadSymbol()` / `reloadPrice()` / `reloadGEXFiltered()`: orchestrate stream lifecycle.
 

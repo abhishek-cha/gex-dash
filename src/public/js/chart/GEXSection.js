@@ -11,10 +11,12 @@ export class GEXSection extends BaseSection {
     super(container, viewport);
 
     this._addGroup('gexBars');
+    this._addGroup('cumulativeLine');
     this._initHighlightGroup();
 
     this._labelsOverlay = null;
     this._tooltip = null;
+
     this._initOverlays();
 
     this._setupInteraction();
@@ -45,39 +47,27 @@ export class GEXSection extends BaseSection {
     this._highlightedStrike = null;
     this._clearHighlightGroup();
     this._buildGEXBars();
+    this._buildCumulativeLine();
     this._buildSeparator();
     this._updateLabels();
     this.render();
   }
 
-  _computeGexMax() {
-    const vp = this.viewport;
-    let maxCallGex = 1, maxPutGex = 1;
-    for (const l of vp.gexLevels) {
-      const ac = Math.abs(l.callGex);
-      const ap = Math.abs(l.putGex);
-      if (ac > maxCallGex) maxCallGex = ac;
-      if (ap > maxPutGex) maxPutGex = ap;
-    }
-    return Math.max(maxCallGex, maxPutGex);
-  }
+  // --- Rendering (runs on every rebuild: pan, zoom, resize) ---
 
   _buildGEXBars() {
     const vp = this.viewport;
     if (!vp.gexLevels.length) return;
 
-    const maxGex = this._computeGexMax();
+    const maxGex = vp.gexMax;
     const halfW = this.width / 2;
     const centerX = halfW;
+    const strikes = vp.sortedStrikes;
 
-    const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
-    const strikeIndex = new Map();
-    for (let i = 0; i < strikes.length; i++) strikeIndex.set(strikes[i], i);
-
-    for (const level of vp.gexLevels) {
+    for (const level of vp.sortedLevels) {
       const py = this.priceToY(level.strike);
       if (py < this._marginBottom() || py > this.height - this._marginTop()) continue;
-      const idx = strikeIndex.get(level.strike);
+      const idx = vp.strikeIndex.get(level.strike);
       const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
 
       if (level.callGex > 0) {
@@ -94,6 +84,32 @@ export class GEXSection extends BaseSection {
         );
       }
     }
+  }
+
+  _buildCumulativeLine() {
+    const vp = this.viewport;
+    if (!vp.gexLevels.length) return;
+    const combined = vp.combinedCumulative;
+    if (!combined || vp.maxCumulativeAbs === 0) return;
+
+    const sorted = vp.sortedLevels;
+    const n = sorted.length;
+    const maxAbs = vp.maxCumulativeAbs;
+    const marginX = 20;
+    const usableW = this.width - marginX * 2;
+    const points = [];
+    for (let i = 0; i < n; i++) {
+      const py = this.priceToY(sorted[i].strike);
+      if (py < this._marginBottom() || py > this.height - this._marginTop()) continue;
+      const xFrac = combined[i] / maxAbs;
+      const x = (this.width / 2) + xFrac * (usableW / 2);
+      points.push([x, py]);
+    }
+
+    if (points.length < 2) return;
+    this.groups.cumulativeLine.add(
+      this.makeLine(points, COLORS.cumulativeGex, 0.9)
+    );
   }
 
   _buildSeparator() {
@@ -141,7 +157,10 @@ export class GEXSection extends BaseSection {
         `<div style="color:${hexCss(COLORS.putGex)}">Put GEX: ${vp.fmtGex(nearest.putGex)}</div>` +
         `<div style="color:${hexCss(COLORS.netGex)}">Net GEX: ${vp.fmtGex(nearest.netGex)}</div>` +
         `<div style="color:${hexCss(COLORS.volume)}">Volume: ${vp.fmtVol(nearest.totalVolume)}</div>` +
-        `<div>OI: ${vp.fmtVol(nearest.totalOI)}</div>`;
+        `<div>OI: ${vp.fmtVol(nearest.totalOI)}</div>` +
+        (vp.cumulativeMap && vp.cumulativeMap.has(nearest.strike)
+          ? `<div style="color:${hexCss(COLORS.cumulativeGex)}">Cum. GEX: ${vp.fmtGex(vp.cumulativeMap.get(nearest.strike))}</div>`
+          : '');
     } else {
       this.clearHighlight();
       this._tooltip.style.display = 'none';
@@ -153,18 +172,19 @@ export class GEXSection extends BaseSection {
     this._highlightedStrike = level.strike;
     this._clearHighlightGroup();
 
-    const vp = this.viewport;
     const py = this.priceToY(level.strike);
     if (py < this._marginBottom() || py > this.height - this._marginTop()) return;
 
-    const strikes = vp.gexLevels.map(l => l.strike).sort((a, b) => a - b);
-    const idx = strikes.indexOf(level.strike);
+    const vp = this.viewport;
+    const strikes = vp.sortedStrikes;
+    const idx = vp.strikeIndex.get(level.strike);
+    if (idx === undefined) return;
     const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
     const glowPad = Math.max(2, barH * 0.3);
     const glowY = barY - glowPad / 2;
     const glowH = barH + glowPad;
 
-    const maxGex = this._computeGexMax();
+    const maxGex = vp.gexMax;
     const halfW = this.width / 2;
     const centerX = halfW;
 
@@ -211,7 +231,7 @@ export class GEXSection extends BaseSection {
 
   _addGexScale(frag) {
     const vp = this.viewport;
-    const maxGex = this._computeGexMax();
+    const maxGex = vp.gexMax;
     const halfW = this.width / 2;
     const centerX = halfW;
     const ticks = 3;

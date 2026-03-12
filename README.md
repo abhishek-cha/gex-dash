@@ -7,6 +7,8 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 ## Features
 
 - **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates
+- **Cumulative net GEX line** — Amber line showing cumulative net GEX across strikes, with bottom-up/top-down splice at the gamma flip point nearest spot price
+- **Total GEX** — Sum of all net GEX displayed in the header bar with green (positive) or red (negative) badge
 - **Dealer levels** — Red (resistance) and green (support) dotted lines drawn on the candlestick chart at key GEX strikes
 - **Volume & OI overlay** — Per-strike options volume with orange flags where volume exceeds open interest
 - **Progressive SSE streaming** — GEX chunks stream as they resolve; price, quote, and expirations load in parallel
@@ -63,7 +65,7 @@ The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS c
 | Price axis | Double-click | Reset to auto-fit Y |
 | X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
 | Section borders | Drag left/right | Resize adjacent sections horizontally (min-widths enforced) |
-| Any section | Crosshair hover | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, and OI; hovered bars glow |
+| Any section | Crosshair hover | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, OI, and cumulative GEX; hovered bars glow |
 
 All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.
 
@@ -125,6 +127,8 @@ Net  GEX = Call GEX + Put GEX
 ```
 
 GEX is aggregated per strike price across all selected expiration dates. Total options volume and open interest are also aggregated per strike. Positive net GEX at a strike implies dealer hedging activity that dampens price movement (a "pin"), while negative net GEX implies amplification. Strikes where volume exceeds open interest are flagged with an orange dot.
+
+A **cumulative net GEX line** (amber) is drawn over the GEX bars. It computes cumulative sums from both directions (bottom-up and top-down), finds the "flip point" — the strike nearest spot where the cumulative sum changes sign — and splices: bottom-up below the flip, top-down above. When total net GEX is positive, bottom-up is used to find the flip (top-down would never go negative); when negative, top-down is used (bottom-up would never go positive). The flip point represents the gamma exposure transition zone.
 
 Two dealer level lines are drawn across the candlestick chart: a **red dotted line** at the strike above spot with the highest positive net GEX (dealer resistance), and a **green dotted line** at the strike below spot with the most negative net GEX (dealer support).
 

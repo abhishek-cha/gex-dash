@@ -57,9 +57,22 @@ body {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 4px;
+  background: #30363d;
+  color: #8b949e;
 }
 #header .change.up { background: #238636; color: #fff; }
 #header .change.down { background: #da3633; color: #fff; }
+#header .total-gex {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: #30363d;
+  color: #8b949e;
+}
+#header .total-gex.positive { background: #238636; color: #fff; }
+#header .total-gex.negative { background: #da3633; color: #fff; }
 #header .search-box {
   margin-left: auto;
   display: flex;

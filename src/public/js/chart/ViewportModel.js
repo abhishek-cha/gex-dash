@@ -13,6 +13,15 @@ export class ViewportModel {
     this.viewEndIdx = 0;
 
     this._manualYScale = false;
+
+    // Derived GEX data — computed on commitGEX, cleared on clearGEX
+    this.sortedStrikes = [];
+    this.strikeIndex = new Map();
+    this.sortedLevels = [];
+    this.gexMax = 1;
+    this.cumulativeMap = null;
+    this.combinedCumulative = null;
+    this.maxCumulativeAbs = 0;
   }
 
   loadPriceData(priceHistory) {
@@ -80,6 +89,7 @@ export class ViewportModel {
   commitGEX() {
     this.gexLevels = this._coldGexLevels;
     this._coldGexLevels = [];
+    this._postProcessGEX();
   }
 
   setSpotPrice(price) {
@@ -90,12 +100,116 @@ export class ViewportModel {
     this.gexLevels = [];
     this._coldGexLevels = [];
     this.spotPrice = 0;
+    this._clearDerivedGEX();
   }
 
   clearPrice() {
     this.priceData = [];
     this.viewStartIdx = 0;
     this.viewEndIdx = 0;
+  }
+
+  _postProcessGEX() {
+    if (!this.gexLevels.length) {
+      this._clearDerivedGEX();
+      return;
+    }
+
+    // Sorted strikes + index
+    const levelMap = new Map(this.gexLevels.map(l => [l.strike, l]));
+    this.sortedStrikes = [...levelMap.keys()].sort((a, b) => a - b);
+    this.strikeIndex = new Map();
+    for (let i = 0; i < this.sortedStrikes.length; i++) {
+      this.strikeIndex.set(this.sortedStrikes[i], i);
+    }
+    this.sortedLevels = this.sortedStrikes.map(s => levelMap.get(s));
+
+    // GEX max
+    let maxCallGex = 1, maxPutGex = 1;
+    for (const l of this.gexLevels) {
+      const ac = Math.abs(l.callGex);
+      const ap = Math.abs(l.putGex);
+      if (ac > maxCallGex) maxCallGex = ac;
+      if (ap > maxPutGex) maxPutGex = ap;
+    }
+    this.gexMax = Math.max(maxCallGex, maxPutGex);
+
+    // Cumulative GEX
+    this._computeCumulative();
+  }
+
+  _computeCumulative() {
+    const sorted = this.sortedLevels;
+    const n = sorted.length;
+    if (n < 2) {
+      this.cumulativeMap = null;
+      this.combinedCumulative = null;
+      this.maxCumulativeAbs = 0;
+      return;
+    }
+
+    // Bottom-up cumulative (lowest strike → highest)
+    const bottomUp = new Array(n);
+    bottomUp[0] = sorted[0].netGex;
+    for (let i = 1; i < n; i++) bottomUp[i] = bottomUp[i - 1] + sorted[i].netGex;
+
+    // Top-down cumulative (highest strike → lowest)
+    const topDown = new Array(n);
+    topDown[n - 1] = sorted[n - 1].netGex;
+    for (let i = n - 2; i >= 0; i--) topDown[i] = topDown[i + 1] + sorted[i].netGex;
+
+    // Find flip point: sign change closest to spot price
+    const totalNet = bottomUp[n - 1];
+    const cum = totalNet >= 0 ? bottomUp : topDown;
+    const spot = this.spotPrice || 0;
+    let flipIdx = -1;
+    let bestDist = Infinity;
+    for (let i = 1; i < n; i++) {
+      if ((cum[i - 1] >= 0 && cum[i] < 0) || (cum[i - 1] < 0 && cum[i] >= 0)) {
+        const idx = Math.abs(cum[i - 1]) <= Math.abs(cum[i]) ? i - 1 : i;
+        const dist = Math.abs(sorted[idx].strike - spot);
+        if (dist < bestDist) { bestDist = dist; flipIdx = idx; }
+      }
+    }
+    if (flipIdx === -1) {
+      flipIdx = 0;
+      let minAbs = Math.abs(cum[0]);
+      for (let i = 1; i < n; i++) {
+        const a = Math.abs(cum[i]);
+        if (a < minAbs) { minAbs = a; flipIdx = i; }
+      }
+    }
+
+    // Splice: bottom-up below flip, top-down above flip
+    const combined = new Array(n);
+    for (let i = 0; i <= flipIdx; i++) combined[i] = bottomUp[i];
+    for (let i = flipIdx + 1; i < n; i++) combined[i] = topDown[i];
+
+    this.combinedCumulative = combined;
+
+    // Cumulative map for tooltip
+    this.cumulativeMap = new Map();
+    for (let i = 0; i < n; i++) {
+      this.cumulativeMap.set(sorted[i].strike, combined[i]);
+    }
+
+    // Max absolute for scaling
+    let maxAbs = 0;
+    for (const c of combined) {
+      const a = Math.abs(c);
+      if (a > maxAbs) maxAbs = a;
+    }
+    this.maxCumulativeAbs = maxAbs;
+  }
+
+  _clearDerivedGEX() {
+    this.sortedStrikes = [];
+    this.strikeIndex = new Map();
+    this.sortedLevels = [];
+    this.gexMax = 1;
+    this.cumulativeMap = null;
+    this.combinedCumulative = null;
+    this.maxCumulativeAbs = 0;
   }
 
   nearestGexLevel(price) {
