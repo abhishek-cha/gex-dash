@@ -526,6 +526,9 @@ body {
 }
 .wl-section-header:hover .wl-section-delete { display: inline; }
 .wl-section-delete:hover { color: #da3633; background: rgba(218,54,51,0.1); }
+.wl-section.dragging { opacity: 0.4; }
+.wl-section.drag-over-top { border-top: 2px solid #1f6feb; }
+.wl-section.drag-over-bottom { border-bottom: 2px solid #1f6feb; }
 
 /* Symbol rows */
 .wl-row {

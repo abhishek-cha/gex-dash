@@ -172,7 +172,7 @@ A persistent right sidebar (TradingView-style) for managing and monitoring symbo
 - **Sections**: Symbols are organized into named sections with collapsible headers. Right-click a symbol to move it to another section or create a new one.
 - **Add**: When the current symbol is not in any watchlist section, a circular **+** button appears in the header bar. Click it to add the symbol to the first section.
 - **Load**: Click any row to load that symbol's chart.
-- **Reorder**: Drag rows to reorder within or across sections.
+- **Reorder**: Drag rows to reorder within or across sections. Drag section headers to reorder entire sections.
 - **Remove**: Hover a row and click **x**, or right-click and choose "Remove".
 
 Data is persisted in `watchlist.json` at the project root (gitignored) as `[{ name: string, symbols: string[] }]`. Legacy flat arrays are auto-migrated to the sections format on first read.

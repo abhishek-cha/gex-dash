@@ -136,6 +136,7 @@ function createSectionEl(sec, si) {
 
   const header = document.createElement('div');
   header.className = 'wl-section-header';
+  header.draggable = true;
 
   const arrow = document.createElement('span');
   arrow.className = 'wl-section-arrow';
@@ -164,6 +165,13 @@ function createSectionEl(sec, si) {
   header.addEventListener('click', () => {
     sectionEl.classList.toggle('collapsed');
   });
+
+  header.addEventListener('dragstart', onSectionDragStart);
+  header.addEventListener('dragover', onSectionDragOver);
+  header.addEventListener('dragleave', onSectionDragLeave);
+  header.addEventListener('drop', onSectionDrop);
+  header.addEventListener('dragend', onSectionDragEnd);
+
   sectionEl.appendChild(header);
 
   const body = document.createElement('div');
@@ -410,7 +418,86 @@ function render() {
   }
 }
 
-// --- Drag and drop ---
+// --- Section drag and drop ---
+
+let sectionDragData = null;
+
+function onSectionDragStart(e) {
+  const header = e.currentTarget;
+  const sectionEl = header.closest('.wl-section');
+  sectionDragData = { name: sectionEl.dataset.sectionName, el: sectionEl };
+  sectionEl.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', '');
+  e.stopPropagation();
+}
+
+function onSectionDragOver(e) {
+  if (!sectionDragData) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  const header = e.currentTarget;
+  const sectionEl = header.closest('.wl-section');
+  const rect = header.getBoundingClientRect();
+  const midY = rect.top + rect.height / 2;
+  sectionEl.classList.remove('drag-over-top', 'drag-over-bottom');
+  if (e.clientY < midY) {
+    sectionEl.classList.add('drag-over-top');
+  } else {
+    sectionEl.classList.add('drag-over-bottom');
+  }
+}
+
+function onSectionDragLeave(e) {
+  if (!sectionDragData) return;
+  const header = e.currentTarget;
+  header.closest('.wl-section').classList.remove('drag-over-top', 'drag-over-bottom');
+}
+
+function onSectionDrop(e) {
+  if (!sectionDragData) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const header = e.currentTarget;
+  const targetEl = header.closest('.wl-section');
+  targetEl.classList.remove('drag-over-top', 'drag-over-bottom');
+
+  const dragName = sectionDragData.name;
+  const targetName = targetEl.dataset.sectionName;
+  if (dragName === targetName) return;
+
+  const rect = header.getBoundingClientRect();
+  const below = e.clientY > rect.top + rect.height / 2;
+
+  // Reorder data model
+  const fromIdx = sections.findIndex(s => s.name === dragName);
+  const removed = sections.splice(fromIdx, 1)[0];
+  let toIdx = sections.findIndex(s => s.name === targetName);
+  if (below) toIdx++;
+  sections.splice(toIdx, 0, removed);
+
+  // Reorder DOM
+  if (below) {
+    targetEl.after(sectionDragData.el);
+  } else {
+    targetEl.before(sectionDragData.el);
+  }
+
+  saveWatchlist();
+}
+
+function onSectionDragEnd() {
+  if (sectionDragData) {
+    sectionDragData.el.classList.remove('dragging');
+  }
+  listEl.querySelectorAll('.wl-section.drag-over-top, .wl-section.drag-over-bottom').forEach(el => {
+    el.classList.remove('drag-over-top', 'drag-over-bottom');
+  });
+  sectionDragData = null;
+}
+
+// --- Row drag and drop ---
 
 let dragData = null;
 
@@ -423,6 +510,7 @@ function onDragStart(e) {
 }
 
 function onDragOver(e) {
+  if (sectionDragData) return;
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
   const row = e.currentTarget;
@@ -441,6 +529,7 @@ function onDragLeave(e) {
 }
 
 function onDrop(e) {
+  if (sectionDragData) return;
   e.preventDefault();
   const target = e.currentTarget;
   target.classList.remove('drag-over-top', 'drag-over-bottom');
