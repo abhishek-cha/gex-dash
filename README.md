@@ -41,19 +41,20 @@ docker compose up --build
 
 The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS certificate is generated. Your browser will show a security warning — proceed through it.
 
+1. Click **Connect with Schwab** to authenticate.
+2. After OAuth redirect, the app loads AAPL by default.
+3. Enter any symbol in the search box and press Enter or click Load.
+4. Click (+) to save symbols to watchlist for quick access.
+
 ### Local Development
 
 ```bash
 npm install
 npm run dev      # auto-reload on changes
+
 npm run build    # compile TypeScript
 npm start        # run compiled output
 ```
-
-1. Click **Connect with Schwab** to authenticate.
-2. After OAuth redirect, the app loads AAPL by default.
-3. Enter any symbol in the search box and press Enter or click Load.
-4. Click **Watchlist** to save symbols for quick access.
 
 ## Chart Interactions
 
