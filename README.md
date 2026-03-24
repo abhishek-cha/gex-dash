@@ -19,36 +19,36 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 
 ## Prerequisites
 
-- **Node.js** >= 18
 - A **Schwab Developer** account with an app registered at [developer.schwab.com](https://developer.schwab.com)
-- Your app's callback URL must include `https://127.0.0.1:3000/auth/callback` (or your custom PORT)
+- Your app's callback URL must be `https://<HOST>:<PORT>/auth/callback` (matching your `.env`)
 
 ## Setup
 
 ```bash
-# Install dependencies
-npm install
-
-# Configure environment
 cp .env.example .env
 # Edit .env with your Schwab API credentials:
 #   SCHWAB_CLIENT_ID=your-app-key
 #   SCHWAB_CLIENT_SECRET=your-app-secret
 #   PORT=3000  (optional)
+#   HOST=127.0.0.1  (optional, for custom IP)
 ```
 
 ## Running
 
 ```bash
-# Development (auto-reload)
-npm run dev
-
-# Production
-npm run build
-npm start
+docker compose up --build
 ```
 
-The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS certificate is generated in `certs/`. Your browser will show a security warning -- proceed through it.
+The server starts at `https://127.0.0.1:3000`. On first run, a self-signed TLS certificate is generated. Your browser will show a security warning — proceed through it.
+
+### Local Development
+
+```bash
+npm install
+npm run dev      # auto-reload on changes
+npm run build    # compile TypeScript
+npm start        # run compiled output
+```
 
 1. Click **Connect with Schwab** to authenticate.
 2. After OAuth redirect, the app loads AAPL by default.

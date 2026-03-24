@@ -11,10 +11,12 @@ import "dotenv/config";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
+const dataDir = process.env.DATA_DIR || projectRoot;
 const PORT = process.env.PORT || 3000;
-const REDIRECT_URI = `https://127.0.0.1:${PORT}/auth/callback`;
+const HOST = process.env.HOST || "127.0.0.1";
+const REDIRECT_URI = `https://${HOST}:${PORT}/auth/callback`;
 
-const schwabAuth = initSchwabAuth(REDIRECT_URI, projectRoot);
+const schwabAuth = initSchwabAuth(REDIRECT_URI, dataDir);
 const app = express();
 
 app.use(express.json());
@@ -22,10 +24,10 @@ app.use(express.static(path.join(__dirname, "public")));
 
 registerAuthRoutes(app, () => schwabAuth);
 registerStreamRoutes(app, () => schwabAuth);
-registerWatchlistRoutes(app, projectRoot);
+registerWatchlistRoutes(app, dataDir);
 
-const sslOpts = ensureCerts(projectRoot);
+const sslOpts = ensureCerts(dataDir);
 https.createServer(sslOpts, app).listen(PORT, () => {
-  console.log(`GEX Dash running at https://127.0.0.1:${PORT}`);
-  console.log(`Authenticate at https://127.0.0.1:${PORT}/auth/login`);
+  console.log(`GEX Dash running at https://${HOST}:${PORT}`);
+  console.log(`Authenticate at https://${HOST}:${PORT}/auth/login`);
 });
