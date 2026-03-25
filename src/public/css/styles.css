@@ -224,8 +224,8 @@ body {
 }
 .gex-mode-toggle {
   position: absolute;
-  top: 4px;
-  left: 8px;
+  top: 6px;
+  left: 10px;
   z-index: 10;
   display: flex;
   border-radius: 4px;
@@ -248,8 +248,8 @@ body {
 }
 .gex-mode-toggle button:hover { background: #21262d; }
 .gex-mode-toggle button.active {
-  background: #1f6feb;
-  color: #fff;
+  background: #30363d;
+  color: #e6edf3;
 }
 
 .tooltip {
