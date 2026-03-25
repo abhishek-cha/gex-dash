@@ -44,7 +44,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 
 ### GEX Calculation (`src/gex.ts`)
 
-- `GEXLevel` interface: `{ strike, callGex, putGex, netGex, totalVolume, totalOI }`
+- `GEXLevel` interface: `{ strike, callGex, putGex, netGex, totalVolume, totalOI, callOI, putOI }`
 - `getExpirationDates(optionChain)`: extracts sorted unique expiration date strings from Schwab's `callExpDateMap`/`putExpDateMap` keys (format: `"YYYY-MM-DD:DTE"`, returns just the date portion)
 - `calculateGEX(optionChain, selectedExpirations?)`: iterates all contracts, filters by expiration if provided, aggregates GEX per strike. Formula: `|gamma| * OI * 100 * spotPrice` (negative for puts). Also aggregates `totalVolume` and `totalOI` per strike.
 
@@ -96,7 +96,7 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 **`ViewportModel`** (`src/public/js/chart/ViewportModel.js`):
 - Shared data model owned by `LayoutManager`, passed to all sections.
 - Holds: `priceData`, `gexLevels` (hot), `_coldGexLevels` (cold buffer), `spotPrice`, `viewPriceMin/Max`, `viewStartIdx/EndIdx`.
-- **Derived GEX data**: `sortedStrikes`, `strikeIndex`, `sortedLevels`, `gexMax`, `combinedCumulative`, `cumulativeMap`, `maxCumulativeAbs` — computed once on `commitGEX()` via `_postProcessGEX()`, cleared on `clearGEX()`.
+- **Derived GEX data**: `sortedStrikes`, `strikeIndex`, `sortedLevels`, `gexMax`, `oiMax`, `combinedCumulative`, `cumulativeMap`, `maxCumulativeAbs` — computed once on `commitGEX()` via `_postProcessGEX()`, cleared on `clearGEX()`.
 - Data methods: `loadPriceData()`, `mergeGEXChunk()`, `commitGEX()`, `setSpotPrice()`, `clearGEX()`, `clearPrice()`.
 - `loadPriceData()` emits `viewport:change` via the bus.
 - **Hot/cold GEX double-buffering**: `mergeGEXChunk()` accumulates into cold buffer. `commitGEX()` promotes cold to hot, then runs `_postProcessGEX()` to compute all derived data before any events fire.
@@ -118,13 +118,13 @@ The frontend uses native ES modules (no build step or bundler). Three.js is load
 - Price axis has an opaque background plane (z=0.5) to occlude candles that extend into the axis area during pan.
 
 **`GEXSection`** (`src/public/js/chart/GEXSection.js`):
-- Pure renderer — all data computation lives in `ViewportModel._postProcessGEX()`. Reads pre-computed `vp.sortedStrikes`, `vp.strikeIndex`, `vp.sortedLevels`, `vp.gexMax`, `vp.combinedCumulative`, `vp.cumulativeMap`, `vp.maxCumulativeAbs`.
-- Call/put GEX bars rendered from center (calls right, puts left).
-- **Cumulative net GEX line**: amber line overlaid on the GEX bars showing cumulative net GEX radiating outward from spot price — upward to highest strike, downward to lowest (data computed in ViewportModel).
+- Pure renderer — all data computation lives in `ViewportModel._postProcessGEX()`. Reads pre-computed `vp.sortedStrikes`, `vp.strikeIndex`, `vp.sortedLevels`, `vp.gexMax`, `vp.oiMax`, `vp.combinedCumulative`, `vp.cumulativeMap`, `vp.maxCumulativeAbs`.
+- **GEX/OI toggle**: a segmented `GEX | OI` toggle button (`.gex-mode-toggle`) in the top-left corner of the section switches `_displayMode` between `'gex'` (default) and `'oi'`. In GEX mode, call/put GEX bars are rendered from center (calls right, puts left) with the cumulative line. In OI mode, call/put open interest bars are rendered instead (calls right, puts left), with no cumulative line. The tooltip adapts to show mode-relevant data.
+- **Cumulative net GEX line**: amber line overlaid on the GEX bars showing cumulative net GEX radiating outward from spot price — upward to highest strike, downward to lowest (data computed in ViewportModel). Only shown in GEX mode.
 - Own mouse interaction: mousemove emits `interaction:crosshair` with `{ price, source: 'gex' }`, mouseleave emits `null`.
 - Subscribes to `interaction:crosshair` for highlight glow, tooltip display, and horizontal crosshair line.
-- Tooltip shows strike, call/put/net GEX, volume, OI, and cumulative GEX.
-- Creates its own DOM overlays: labels overlay with GEX scale, horizontal crosshair line (`crosshair-h`).
+- Tooltip shows strike, call/put/net GEX, volume, OI, and cumulative GEX in GEX mode; shows strike, call OI, put OI, total OI, and volume in OI mode.
+- Creates its own DOM overlays: labels overlay with GEX/OI scale, horizontal crosshair line (`crosshair-h`), and the mode toggle.
 
 **`VolumeSection`** (`src/public/js/chart/VolumeSection.js`):
 - Per-strike volume bars with orange alert dots when volume > OI.

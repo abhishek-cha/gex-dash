@@ -6,7 +6,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 
 ## Features
 
-- **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates
+- **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates. Toggle to **OI mode** to view call/put open interest per strike instead
 - **Cumulative net GEX line** — Amber line showing cumulative net GEX radiating outward from spot price (upward to highest strike, downward to lowest strike)
 - **Total GEX** — Sum of all net GEX displayed in the header bar with green (positive) or red (negative) badge
 - **Dealer levels** — Red (resistance) and green (support) dotted lines drawn on the candlestick chart at key GEX strikes

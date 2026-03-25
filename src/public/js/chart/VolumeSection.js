@@ -12,6 +12,7 @@ export class VolumeSection extends BaseSection {
 
     this._labelsOverlay = null;
     this._initOverlays();
+    this._initHeader();
 
     this._setupInteraction();
 
@@ -20,6 +21,17 @@ export class VolumeSection extends BaseSection {
       bus.on('interaction:crosshair', (data) => this._onCrosshair(data)),
     ];
 
+  }
+
+  _initHeader() {
+    const hdr = document.createElement('div');
+    hdr.className = 'gex-mode-toggle';
+    const lbl = document.createElement('button');
+    lbl.textContent = 'VOL';
+    lbl.className = 'active';
+    lbl.style.cursor = 'default';
+    hdr.appendChild(lbl);
+    this.container.appendChild(hdr);
   }
 
   _setupInteraction() {
@@ -154,12 +166,6 @@ export class VolumeSection extends BaseSection {
     const vp = this.viewport;
     const overlay = this._labelsOverlay;
     const frag = document.createDocumentFragment();
-
-    const volLabel = document.createElement('div');
-    volLabel.className = 'section-label';
-    volLabel.style.left = '8px';
-    volLabel.textContent = 'VOLUME';
-    frag.appendChild(volLabel);
 
     if (vp.gexLevels.length > 0) {
       this._addVolumeScale(frag);

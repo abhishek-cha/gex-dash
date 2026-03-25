@@ -19,6 +19,7 @@ export class ViewportModel {
     this.strikeIndex = new Map();
     this.sortedLevels = [];
     this.gexMax = 1;
+    this.oiMax = 1;
     this.cumulativeMap = null;
     this.combinedCumulative = null;
     this.maxCumulativeAbs = 0;
@@ -79,6 +80,8 @@ export class ViewportModel {
         existing.netGex += l.netGex;
         existing.totalVolume += l.totalVolume;
         existing.totalOI += l.totalOI;
+        existing.callOI += (l.callOI || 0);
+        existing.putOI += (l.putOI || 0);
       } else {
         map.set(l.strike, { ...l });
       }
@@ -126,13 +129,17 @@ export class ViewportModel {
 
     // GEX max
     let maxCallGex = 1, maxPutGex = 1;
+    let maxCallOI = 1, maxPutOI = 1;
     for (const l of this.gexLevels) {
       const ac = Math.abs(l.callGex);
       const ap = Math.abs(l.putGex);
       if (ac > maxCallGex) maxCallGex = ac;
       if (ap > maxPutGex) maxPutGex = ap;
+      if ((l.callOI || 0) > maxCallOI) maxCallOI = l.callOI;
+      if ((l.putOI || 0) > maxPutOI) maxPutOI = l.putOI;
     }
     this.gexMax = Math.max(maxCallGex, maxPutGex);
+    this.oiMax = Math.max(maxCallOI, maxPutOI);
 
     // Cumulative GEX
     this._computeCumulative();
@@ -193,6 +200,7 @@ export class ViewportModel {
     this.strikeIndex = new Map();
     this.sortedLevels = [];
     this.gexMax = 1;
+    this.oiMax = 1;
     this.cumulativeMap = null;
     this.combinedCumulative = null;
     this.maxCumulativeAbs = 0;

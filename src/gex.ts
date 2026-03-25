@@ -5,6 +5,8 @@ export interface GEXLevel {
   netGex: number;
   totalVolume: number;
   totalOI: number;
+  callOI: number;
+  putOI: number;
 }
 
 export function getExpirationDates(optionChain: any): string[] {
@@ -32,12 +34,12 @@ export function calculateGEX(
 
   const gexMap = new Map<
     number,
-    { callGex: number; putGex: number; totalVolume: number; totalOI: number }
+    { callGex: number; putGex: number; totalVolume: number; totalOI: number; callOI: number; putOI: number }
   >();
 
   const ensureStrike = (strike: number) => {
     if (!gexMap.has(strike))
-      gexMap.set(strike, { callGex: 0, putGex: 0, totalVolume: 0, totalOI: 0 });
+      gexMap.set(strike, { callGex: 0, putGex: 0, totalVolume: 0, totalOI: 0, callOI: 0, putOI: 0 });
     return gexMap.get(strike)!;
   };
 
@@ -55,6 +57,7 @@ export function calculateGEX(
           entry.callGex += gex;
           entry.totalVolume += contract.totalVolume || 0;
           entry.totalOI += oi;
+          entry.callOI += oi;
         }
       }
     }
@@ -74,13 +77,14 @@ export function calculateGEX(
           entry.putGex += gex;
           entry.totalVolume += contract.totalVolume || 0;
           entry.totalOI += oi;
+          entry.putOI += oi;
         }
       }
     }
   }
 
   const levels: GEXLevel[] = [];
-  for (const [strike, { callGex, putGex, totalVolume, totalOI }] of gexMap) {
+  for (const [strike, { callGex, putGex, totalVolume, totalOI, callOI, putOI }] of gexMap) {
     levels.push({
       strike,
       callGex,
@@ -88,6 +92,8 @@ export function calculateGEX(
       netGex: callGex + putGex,
       totalVolume,
       totalOI,
+      callOI,
+      putOI,
     });
   }
 

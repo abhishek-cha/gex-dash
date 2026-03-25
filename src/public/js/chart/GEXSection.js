@@ -16,8 +16,10 @@ export class GEXSection extends BaseSection {
 
     this._labelsOverlay = null;
     this._tooltip = null;
+    this._displayMode = 'gex'; // 'gex' or 'oi'
 
     this._initOverlays();
+    this._initToggle();
 
     this._setupInteraction();
 
@@ -42,12 +44,46 @@ export class GEXSection extends BaseSection {
     this.container.appendChild(this._tooltip);
   }
 
+  _initToggle() {
+    const toggle = document.createElement('div');
+    toggle.className = 'gex-mode-toggle';
+
+    const gexBtn = document.createElement('button');
+    gexBtn.textContent = 'GEX';
+    gexBtn.className = 'active';
+    gexBtn.addEventListener('click', () => {
+      if (this._displayMode === 'gex') return;
+      this._displayMode = 'gex';
+      gexBtn.classList.add('active');
+      oiBtn.classList.remove('active');
+      this.rebuild();
+    });
+
+    const oiBtn = document.createElement('button');
+    oiBtn.textContent = 'OI';
+    oiBtn.addEventListener('click', () => {
+      if (this._displayMode === 'oi') return;
+      this._displayMode = 'oi';
+      oiBtn.classList.add('active');
+      gexBtn.classList.remove('active');
+      this.rebuild();
+    });
+
+    toggle.appendChild(gexBtn);
+    toggle.appendChild(oiBtn);
+    this.container.appendChild(toggle);
+  }
+
   rebuild() {
     this._clearAllGroups();
     this._highlightedStrike = null;
     this._clearHighlightGroup();
-    this._buildGEXBars();
-    this._buildCumulativeLine();
+    if (this._displayMode === 'oi') {
+      this._buildOIBars();
+    } else {
+      this._buildGEXBars();
+      this._buildCumulativeLine();
+    }
     this._buildSeparator();
     this._updateLabels();
     this.render();
@@ -79,6 +115,40 @@ export class GEXSection extends BaseSection {
 
       if (level.putGex < 0) {
         const w = (Math.abs(level.putGex) / maxGex) * halfW;
+        this.groups.gexBars.add(
+          this.makePlane(centerX - w, barY, w, barH, COLORS.putGex, 0.85)
+        );
+      }
+    }
+  }
+
+  _buildOIBars() {
+    const vp = this.viewport;
+    if (!vp.gexLevels.length) return;
+
+    const maxOI = vp.oiMax;
+    const halfW = this.width / 2;
+    const centerX = halfW;
+    const strikes = vp.sortedStrikes;
+
+    for (const level of vp.sortedLevels) {
+      const py = this.priceToY(level.strike);
+      if (py < this._marginBottom() || py > this.height - this._marginTop()) continue;
+      const idx = vp.strikeIndex.get(level.strike);
+      const { y: barY, h: barH } = this._gexBarBounds(level.strike, strikes, idx);
+
+      const callOI = level.callOI || 0;
+      const putOI = level.putOI || 0;
+
+      if (callOI > 0) {
+        const w = (callOI / maxOI) * halfW;
+        this.groups.gexBars.add(
+          this.makePlane(centerX, barY, w, barH, COLORS.callGex, 0.85)
+        );
+      }
+
+      if (putOI > 0) {
+        const w = (putOI / maxOI) * halfW;
         this.groups.gexBars.add(
           this.makePlane(centerX - w, barY, w, barH, COLORS.putGex, 0.85)
         );
@@ -151,16 +221,26 @@ export class GEXSection extends BaseSection {
       this._tooltip.style.left = '8px';
       const myFromPrice = this.height - this.priceToY(data.price);
       this._tooltip.style.top = (myFromPrice - 10) + 'px';
-      this._tooltip.innerHTML =
-        `<div>Strike: ${nearest.strike}</div>` +
-        `<div style="color:${hexCss(COLORS.callGex)}">Call GEX: ${vp.fmtGex(nearest.callGex)}</div>` +
-        `<div style="color:${hexCss(COLORS.putGex)}">Put GEX: ${vp.fmtGex(nearest.putGex)}</div>` +
-        `<div style="color:${hexCss(COLORS.netGex)}">Net GEX: ${vp.fmtGex(nearest.netGex)}</div>` +
-        `<div style="color:${hexCss(COLORS.volume)}">Volume: ${vp.fmtVol(nearest.totalVolume)}</div>` +
-        `<div>OI: ${vp.fmtVol(nearest.totalOI)}</div>` +
-        (vp.cumulativeMap && vp.cumulativeMap.has(nearest.strike)
-          ? `<div style="color:${hexCss(COLORS.cumulativeGex)}">Cum. GEX: ${vp.fmtGex(vp.cumulativeMap.get(nearest.strike))}</div>`
-          : '');
+
+      if (this._displayMode === 'oi') {
+        this._tooltip.innerHTML =
+          `<div>Strike: ${nearest.strike}</div>` +
+          `<div style="color:${hexCss(COLORS.callGex)}">Call OI: ${vp.fmtVol(nearest.callOI || 0)}</div>` +
+          `<div style="color:${hexCss(COLORS.putGex)}">Put OI: ${vp.fmtVol(nearest.putOI || 0)}</div>` +
+          `<div>Total OI: ${vp.fmtVol(nearest.totalOI)}</div>` +
+          `<div style="color:${hexCss(COLORS.volume)}">Volume: ${vp.fmtVol(nearest.totalVolume)}</div>`;
+      } else {
+        this._tooltip.innerHTML =
+          `<div>Strike: ${nearest.strike}</div>` +
+          `<div style="color:${hexCss(COLORS.callGex)}">Call GEX: ${vp.fmtGex(nearest.callGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.putGex)}">Put GEX: ${vp.fmtGex(nearest.putGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.netGex)}">Net GEX: ${vp.fmtGex(nearest.netGex)}</div>` +
+          `<div style="color:${hexCss(COLORS.volume)}">Volume: ${vp.fmtVol(nearest.totalVolume)}</div>` +
+          `<div>OI: ${vp.fmtVol(nearest.totalOI)}</div>` +
+          (vp.cumulativeMap && vp.cumulativeMap.has(nearest.strike)
+            ? `<div style="color:${hexCss(COLORS.cumulativeGex)}">Cum. GEX: ${vp.fmtGex(vp.cumulativeMap.get(nearest.strike))}</div>`
+            : '');
+      }
     } else {
       this.clearHighlight();
       this._tooltip.style.display = 'none';
@@ -184,21 +264,39 @@ export class GEXSection extends BaseSection {
     const glowY = barY - glowPad / 2;
     const glowH = barH + glowPad;
 
-    const maxGex = vp.gexMax;
     const halfW = this.width / 2;
     const centerX = halfW;
 
-    if (level.callGex > 0) {
-      const w = (level.callGex / maxGex) * halfW + glowPad;
-      this._highlightGroup.add(
-        this.makePlane(centerX, glowY, w, glowH, COLORS.callGex, 0.25)
-      );
-    }
-    if (level.putGex < 0) {
-      const w = (Math.abs(level.putGex) / maxGex) * halfW + glowPad;
-      this._highlightGroup.add(
-        this.makePlane(centerX - w, glowY, w, glowH, COLORS.putGex, 0.25)
-      );
+    if (this._displayMode === 'oi') {
+      const maxOI = vp.oiMax;
+      const callOI = level.callOI || 0;
+      const putOI = level.putOI || 0;
+      if (callOI > 0) {
+        const w = (callOI / maxOI) * halfW + glowPad;
+        this._highlightGroup.add(
+          this.makePlane(centerX, glowY, w, glowH, COLORS.callGex, 0.25)
+        );
+      }
+      if (putOI > 0) {
+        const w = (putOI / maxOI) * halfW + glowPad;
+        this._highlightGroup.add(
+          this.makePlane(centerX - w, glowY, w, glowH, COLORS.putGex, 0.25)
+        );
+      }
+    } else {
+      const maxGex = vp.gexMax;
+      if (level.callGex > 0) {
+        const w = (level.callGex / maxGex) * halfW + glowPad;
+        this._highlightGroup.add(
+          this.makePlane(centerX, glowY, w, glowH, COLORS.callGex, 0.25)
+        );
+      }
+      if (level.putGex < 0) {
+        const w = (Math.abs(level.putGex) / maxGex) * halfW + glowPad;
+        this._highlightGroup.add(
+          this.makePlane(centerX - w, glowY, w, glowH, COLORS.putGex, 0.25)
+        );
+      }
     }
     this.render();
   }
@@ -215,14 +313,12 @@ export class GEXSection extends BaseSection {
     const overlay = this._labelsOverlay;
     const frag = document.createDocumentFragment();
 
-    const gexLabel = document.createElement('div');
-    gexLabel.className = 'section-label';
-    gexLabel.style.left = '8px';
-    gexLabel.textContent = 'GEX';
-    frag.appendChild(gexLabel);
-
     if (vp.gexLevels.length > 0) {
-      this._addGexScale(frag);
+      if (this._displayMode === 'oi') {
+        this._addOIScale(frag);
+      } else {
+        this._addGexScale(frag);
+      }
     }
 
     overlay.innerHTML = '';
@@ -264,6 +360,46 @@ export class GEXSection extends BaseSection {
         ll.style.left = lx + 'px';
         ll.style.color = hexCss(COLORS.putGex);
         ll.textContent = vp.fmtGex(v);
+        frag.appendChild(ll);
+      }
+    }
+  }
+
+  _addOIScale(frag) {
+    const vp = this.viewport;
+    const maxOI = vp.oiMax;
+    const halfW = this.width / 2;
+    const centerX = halfW;
+    const ticks = 3;
+    const scaleStep = vp.niceStep(maxOI, ticks);
+
+    const zeroLbl = document.createElement('div');
+    zeroLbl.className = 'gex-scale-label';
+    zeroLbl.style.left = centerX + 'px';
+    zeroLbl.textContent = '0';
+    frag.appendChild(zeroLbl);
+
+    for (let v = scaleStep; v <= maxOI * 1.05; v += scaleStep) {
+      const frac = v / maxOI;
+      if (frac > 1.05) break;
+
+      const rx = centerX + frac * halfW;
+      if (rx < this.width - 5) {
+        const rl = document.createElement('div');
+        rl.className = 'gex-scale-label';
+        rl.style.left = rx + 'px';
+        rl.style.color = hexCss(COLORS.callGex);
+        rl.textContent = vp.fmtVol(v);
+        frag.appendChild(rl);
+      }
+
+      const lx = centerX - frac * halfW;
+      if (lx > 5) {
+        const ll = document.createElement('div');
+        ll.className = 'gex-scale-label';
+        ll.style.left = lx + 'px';
+        ll.style.color = hexCss(COLORS.putGex);
+        ll.textContent = vp.fmtVol(v);
         frag.appendChild(ll);
       }
     }

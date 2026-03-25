@@ -222,6 +222,36 @@ body {
   transform: translateY(-50%);
   z-index: 5;
 }
+.gex-mode-toggle {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  z-index: 10;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #30363d;
+}
+.gex-mode-toggle button {
+  background: #161b22;
+  color: #8b949e;
+  border: none;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  line-height: 1.4;
+}
+.gex-mode-toggle button:not(:last-child) {
+  border-right: 1px solid #30363d;
+}
+.gex-mode-toggle button:hover { background: #21262d; }
+.gex-mode-toggle button.active {
+  background: #1f6feb;
+  color: #fff;
+}
+
 .tooltip {
   position: absolute;
   background: #1c2128;
