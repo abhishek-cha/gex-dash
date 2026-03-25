@@ -7,6 +7,7 @@ import {
   fetchPriceHistory,
   fetchQuote,
   estToday,
+  getValidAccessToken,
 } from "../schwab.js";
 import { calculateGEX, getExpirationDates } from "../gex.js";
 
@@ -129,7 +130,7 @@ export function registerStreamRoutes(
     const schwabAuth = getSchwabAuth();
 
     try {
-      const accessToken = await schwabAuth.getAccessToken();
+      const accessToken = await getValidAccessToken(schwabAuth);
       if (!accessToken) {
         return res.status(401).json({ error: "No valid access token" });
       }

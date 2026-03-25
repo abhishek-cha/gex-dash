@@ -6,8 +6,12 @@ import {
 } from "@sudowealth/schwab-api";
 
 const SCHWAB_API_BASE = "https://api.schwabapi.com/marketdata/v1";
+const REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
 
 // --- Token persistence ---
+
+/** Real absolute expiry tracked outside the library (works around mapToTokenData bug) */
+let tokenExpiresAt: number | null = null;
 
 function saveTokens(tokenFile: string, tokens: any) {
   fs.writeFileSync(tokenFile, JSON.stringify(tokens, null, 2));
@@ -35,23 +39,46 @@ export function initSchwabAuth(
       clientSecret: process.env.SCHWAB_CLIENT_SECRET!,
       redirectUri,
       save: async (tokens) => {
+        tokenExpiresAt = tokens.expiresAt ?? null;
         saveTokens(tokenFile, tokens);
         console.log("Tokens saved to .tokens.json");
       },
       load: async () => {
         const tokens = loadTokens(tokenFile);
-        if (tokens) console.log("Tokens loaded from .tokens.json");
+        if (tokens) {
+          tokenExpiresAt = tokens.expiresAt ?? null;
+          console.log("Tokens loaded from .tokens.json");
+        }
         return tokens;
       },
     },
   });
 }
 
+/**
+ * Get a valid access token, forcing a refresh if the real expiry is near.
+ * Works around the library's mapToTokenData bug which recalculates expiresAt
+ * from expires_in on every call, making tokens appear to never expire.
+ */
+export async function getValidAccessToken(
+  auth: EnhancedTokenManager
+): Promise<string | null> {
+  if (tokenExpiresAt && Date.now() + REFRESH_BUFFER_MS >= tokenExpiresAt) {
+    try {
+      await auth.refreshIfNeeded({ force: true });
+    } catch (e) {
+      console.error("Token refresh failed:", (e as Error).message);
+      return null;
+    }
+  }
+  return auth.getAccessToken();
+}
+
 export async function hasValidToken(
   auth: EnhancedTokenManager
 ): Promise<boolean> {
   try {
-    const token = await auth.getAccessToken();
+    const token = await getValidAccessToken(auth);
     return !!token;
   } catch {
     return false;
