@@ -23,7 +23,11 @@
   <div id="tab-watchlist" class="tab-view active">
     <div class="tab-header">
       <span class="tab-title">Watchlist</span>
-      <button id="wl-add-btn">+</button>
+      <select id="wl-add-btn">
+        <option value="" disabled selected>+</option>
+        <option value="symbol">Add Symbol</option>
+        <option value="section">New Section</option>
+      </select>
     </div>
     <div id="wl-sections"></div>
   </div>

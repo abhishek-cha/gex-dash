@@ -21,15 +21,16 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     if (!row || !('_swipeStartX' in row)) return;
 
     const dx = e.touches[0].clientX - row._swipeStartX;
-    if (dx < -10) row._swiping = true;
+    const isOpen = row === activeSwipeRow;
+    if (dx < -10 || (isOpen && dx > 10)) row._swiping = true;
     if (!row._swiping) return;
 
-    const offset = Math.min(0, Math.max(-56, dx));
+    const base = isOpen ? -48 : 0;
+    const offset = Math.min(0, Math.max(-56, base + dx));
     row.style.transform = `translateX(${offset}px)`;
     row.style.transition = 'none';
 
-    // Show/create delete behind
-    ensureDeleteBehind(row);
+    if (!isOpen) ensureDeleteBehind(row);
   }, { passive: true });
 
   container.addEventListener('touchend', (e) => {
@@ -42,13 +43,16 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     }
 
     const dx = e.changedTouches[0].clientX - row._swipeStartX;
+    const isOpen = row === activeSwipeRow;
     row.style.transition = 'transform 0.2s ease';
 
-    if (dx < -SWIPE_THRESHOLD) {
+    if (!isOpen && dx < -SWIPE_THRESHOLD) {
       row.style.transform = 'translateX(-48px)';
       if (activeSwipeRow && activeSwipeRow !== row) closeSwipeRow(activeSwipeRow);
       activeSwipeRow = row;
-    } else {
+    } else if (isOpen && dx > 20) {
+      closeSwipeRow(row);
+    } else if (!isOpen) {
       closeSwipeRow(row);
     }
 
@@ -60,7 +64,7 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     if (row.querySelector('.wl-swipe-delete')) return;
     const btn = document.createElement('button');
     btn.className = 'wl-swipe-delete';
-    btn.textContent = '🗑';
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       const sym = row.dataset.symbol;
@@ -94,6 +98,8 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
   });
 
   // --- Long press to reorder ---
+  let activePointerId = null;
+
   container.addEventListener('pointerdown', (e) => {
     const row = e.target.closest('.wl-row');
     if (!row) return;
@@ -101,8 +107,9 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     if (activeSwipeRow) return;
 
     startY = e.clientY;
+    activePointerId = e.pointerId;
     pressTimer = setTimeout(() => {
-      startDrag(row, e);
+      startDrag(row);
     }, LONG_PRESS_MS);
 
     const onMoveCancel = (ev) => {
@@ -117,16 +124,21 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     const cleanup = () => {
       clearTimeout(pressTimer);
       pressTimer = null;
+      activePointerId = null;
       container.removeEventListener('pointermove', onMoveCancel);
     };
     container.addEventListener('pointerup', cleanup, { once: true });
     container.addEventListener('pointercancel', cleanup, { once: true });
   });
 
-  function startDrag(row, e) {
+  function startDrag(row) {
     dragRow = row;
     dragRow.classList.add('dragging');
-    dragRow.setPointerCapture(e.pointerId);
+    container.style.overflow = 'hidden';
+    container.style.touchAction = 'none';
+    if (activePointerId != null) {
+      try { dragRow.setPointerCapture(activePointerId); } catch {}
+    }
 
     placeholder = document.createElement('div');
     placeholder.style.height = row.offsetHeight + 'px';
@@ -138,7 +150,7 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     dragRow.style.position = 'fixed';
     dragRow.style.width = container.clientWidth + 'px';
     dragRow.style.left = '0';
-    dragRow.style.top = e.clientY - row.offsetHeight / 2 + 'px';
+    dragRow.style.top = startY - row.offsetHeight / 2 + 'px';
     dragRow.style.zIndex = '200';
     dragRow.style.pointerEvents = 'none';
 
@@ -173,6 +185,8 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     dragRow.style.top = '';
     dragRow.style.zIndex = '';
     dragRow.style.pointerEvents = '';
+    container.style.overflow = '';
+    container.style.touchAction = '';
 
     dragRow.removeEventListener('pointermove', onDragMove);
     dragRow.removeEventListener('pointerup', onDragEnd);

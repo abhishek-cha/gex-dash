@@ -250,100 +250,27 @@ function closeWatchlistStreams() {
   }
 }
 
-function showAddPicker() {
-  removeAddRow();
-  const select = document.createElement('select');
-  select.id = 'wl-add-picker';
-  select.className = 'wl-add-picker';
-  select.innerHTML = `
-    <option value="" disabled selected>Add...</option>
-    <option value="symbol">Add Symbol</option>
-    <option value="section">New Section</option>
-  `;
-  select.addEventListener('change', () => {
-    if (select.value === 'symbol') {
-      select.remove();
-      showAddSymbolRow();
-    } else if (select.value === 'section') {
-      select.remove();
-      showAddSectionRow();
-    }
-  });
-
-  const container = document.getElementById('wl-sections');
-  container.parentNode.insertBefore(select, container);
-  select.focus();
-  select.click();
-}
-
-function showAddSymbolRow() {
-  removeAddRow();
-  const container = document.getElementById('wl-sections');
-  const row = document.createElement('div');
-  row.className = 'wl-row wl-add-inline';
-  row.innerHTML = `
-    <input type="text" class="wl-inline-input" placeholder="Ticker" autocapitalize="characters" />
-    <button class="wl-inline-add-btn">+</button>
-  `;
-  container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
-
-  const input = row.querySelector('input');
-  const btn = row.querySelector('button');
-  input.focus();
-
-  const doAdd = async () => {
-    const sym = input.value.trim().toUpperCase();
-    if (!sym) return;
+function handleAdd(value) {
+  if (value === 'symbol') {
+    const sym = prompt('Ticker symbol:');
+    if (!sym || !sym.trim()) return;
+    const ticker = sym.trim().toUpperCase();
     const section = watchlistData[0]?.name || 'Watchlist';
     if (!watchlistData.length) {
       watchlistData.push({ name: section, symbols: [] });
     }
-    await fetch(`/api/watchlist/${encodeURIComponent(section)}/${encodeURIComponent(sym)}`, { method: 'POST' });
-    removeAddRow();
-    await loadWatchlist();
-  };
-
-  btn.addEventListener('click', doAdd);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
-}
-
-function showAddSectionRow() {
-  removeAddRow();
-  const container = document.getElementById('wl-sections');
-  const row = document.createElement('div');
-  row.className = 'wl-section-header wl-add-inline';
-  row.innerHTML = `
-    <input type="text" class="wl-inline-input" placeholder="Section name" />
-    <button class="wl-inline-add-btn">+</button>
-  `;
-  container.appendChild(row);
-  container.scrollTop = container.scrollHeight;
-
-  const input = row.querySelector('input');
-  const btn = row.querySelector('button');
-  input.focus();
-
-  const doAdd = async () => {
-    const name = input.value.trim();
-    if (!name) return;
-    watchlistData.push({ name, symbols: [] });
-    await fetch('/api/watchlist', {
+    fetch(`/api/watchlist/${encodeURIComponent(section)}/${encodeURIComponent(ticker)}`, { method: 'POST' })
+      .then(() => loadWatchlist());
+  } else if (value === 'section') {
+    const name = prompt('Section name:');
+    if (!name || !name.trim()) return;
+    watchlistData.push({ name: name.trim(), symbols: [] });
+    fetch('/api/watchlist', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(watchlistData),
-    });
-    removeAddRow();
-    await loadWatchlist();
-  };
-
-  btn.addEventListener('click', doAdd);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
-}
-
-function removeAddRow() {
-  document.getElementById('wl-add-picker')?.remove();
-  document.querySelectorAll('.wl-add-inline').forEach((el) => el.remove());
+    }).then(() => loadWatchlist());
+  }
 }
 
 function reloadPrice() {
@@ -449,7 +376,11 @@ async function init() {
     setView(e.target.value);
   });
 
-  document.getElementById('wl-add-btn').addEventListener('click', showAddPicker);
+  const addSel = document.getElementById('wl-add-btn');
+  addSel.addEventListener('change', () => {
+    handleAdd(addSel.value);
+    addSel.value = '';
+  });
 
   await loadWatchlist();
 

@@ -129,15 +129,16 @@ html, body {
   font-weight: 700;
 }
 
-.tab-header button {
+.tab-header select {
   background: none;
   border: none;
   color: #fff;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 300;
   cursor: pointer;
   padding: 0;
-  line-height: 1;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 #wl-sections {
@@ -186,11 +187,11 @@ html, body {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #ff453a;
-  border: none;
-  font-size: 14px;
-  line-height: 28px;
-  text-align: center;
+  background: rgba(255, 69, 58, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
@@ -363,56 +364,6 @@ html, body {
   padding: 2px 4px;
 }
 
-/* Add picker */
-.wl-add-picker {
-  display: block;
-  margin: 10px 16px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  font-size: 15px;
-  width: calc(100% - 32px);
-}
-
-/* Inline add row */
-.wl-add-inline {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-}
-
-.wl-inline-input {
-  flex: 1;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  color: var(--text-primary);
-  font-size: 15px;
-  outline: none;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.wl-inline-input:focus {
-  border-color: var(--accent);
-}
-
-.wl-inline-add-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #26a69a;
-  border: none;
-  color: #fff;
-  font-size: 18px;
-  line-height: 28px;
-  text-align: center;
-  cursor: pointer;
-}
 
 .section-loading {
   display: none;
