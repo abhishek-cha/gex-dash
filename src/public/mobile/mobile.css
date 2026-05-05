@@ -350,7 +350,7 @@ html, body {
   gap: 6px;
   background: var(--bg-panel);
   border-radius: 6px;
-  padding: 3px 6px;
+  padding: 0 3px;
   flex-shrink: 0;
 }
 
