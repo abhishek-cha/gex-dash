@@ -695,3 +695,5 @@ body {
   font-weight: 600;
 }
 .wl-ctx-input button:hover { background: #2ea043; }
+
+.section-wrap canvas { touch-action: none; }

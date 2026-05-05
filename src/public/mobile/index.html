@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#000000" />
+  <title>GEX Dash</title>
+  <link rel="manifest" href="/mobile/manifest.json" />
+  <link rel="stylesheet" href="/mobile/mobile.css" />
+</head>
+<body>
+
+<div id="login-screen">
+  <h1>GEX Dash</h1>
+  <p>Connect your Schwab Developer account to view Gamma Exposure levels</p>
+  <a href="/auth/login">Connect with Schwab</a>
+</div>
+
+<div id="app">
+  <!-- Watchlist Tab -->
+  <div id="tab-watchlist" class="tab-view active">
+    <div class="tab-header">
+      <span class="tab-title">Watchlist</span>
+      <button id="wl-add-btn">+</button>
+    </div>
+    <div id="wl-sections"></div>
+  </div>
+
+  <!-- Chart Tab -->
+  <div id="tab-chart" class="tab-view">
+    <div id="chart-header">
+      <div class="chart-symbol-bar">
+        <span id="chart-symbol">--</span>
+        <span id="chart-price">--</span>
+        <span id="chart-change">--</span>
+      </div>
+    </div>
+    <div id="chart-area">
+      <div id="chart-price-wrap"></div>
+      <div id="gex-toggle-arrow" class="collapsed">‹</div>
+      <div id="chart-gex-wrap" class="collapsed">
+        <div id="gex-mode-toggle">
+          <button class="active" data-mode="gex">GEX</button>
+          <button data-mode="vol">VOL</button>
+        </div>
+        <div id="gex-chart-container"></div>
+      </div>
+    </div>
+    <div id="chart-toolbar">
+      <div class="interval-pills">
+        <button data-freq="1D" data-range="5D">1D</button>
+        <button data-freq="1D" data-range="1M" class="active">1W</button>
+        <button data-freq="1D" data-range="3M">1M</button>
+        <button data-freq="1W" data-range="1Y">3M</button>
+        <button data-freq="1W" data-range="2Y">1Y</button>
+      </div>
+      <button id="exp-btn">Exp ▾</button>
+    </div>
+  </div>
+
+  <!-- Bottom Sheet (add symbol/section) -->
+  <div id="bottom-sheet" class="hidden">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-content">
+      <div class="sheet-handle"></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div id="tab-bar">
+    <button class="tab-btn active" data-tab="watchlist">
+      <span class="tab-icon">☰</span>
+      <span class="tab-label">Watchlist</span>
+    </button>
+    <button class="tab-btn" data-tab="chart">
+      <span class="tab-icon">◧</span>
+      <span class="tab-label">Chart</span>
+    </button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module" src="/mobile/mobile.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/mobile/sw.js');
+  }
+</script>
+
+</body>
+</html>

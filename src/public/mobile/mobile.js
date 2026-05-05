@@ -1,0 +1,396 @@
+import { checkAuth, openStream, getPriceParams } from '/js/api.js';
+import { bus } from '/js/chart/EventBus.js';
+import { ViewportModel } from '/js/chart/ViewportModel.js';
+import { PriceChart } from '/js/chart/PriceChart.js';
+import { GEXSection } from '/js/chart/GEXSection.js';
+import { VolumeSection } from '/js/chart/VolumeSection.js';
+import { setupWatchlistReorder } from '/mobile/touch.js';
+
+const state = {
+  currentSymbol: null,
+  activeStream: null,
+  activeFreq: '1D',
+  activeRange: '1M',
+  allExpirations: [],
+  selectedExpirations: new Set(),
+  gexPanelOpen: false,
+  gexMode: 'gex',
+
+  closeStream() {
+    if (this.activeStream) {
+      this.activeStream.close();
+      this.activeStream = null;
+    }
+  },
+};
+
+let viewport = null;
+let priceChart = null;
+let gexSection = null;
+let volumeSection = null;
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.querySelector(`.tab-btn[data-tab="${tab}"]`).classList.add('active');
+}
+
+function initChart() {
+  if (viewport) return;
+  viewport = new ViewportModel();
+
+  const priceWrap = document.getElementById('chart-price-wrap');
+  const gexContainer = document.getElementById('gex-chart-container');
+
+  const gexInner = document.createElement('div');
+  gexInner.id = 'gex-inner';
+  gexInner.style.cssText = 'position:absolute;inset:0;';
+  gexContainer.appendChild(gexInner);
+
+  const volInner = document.createElement('div');
+  volInner.id = 'vol-inner';
+  volInner.style.cssText = 'position:absolute;inset:0;display:none;';
+  gexContainer.appendChild(volInner);
+
+  priceChart = new PriceChart(priceWrap, viewport);
+  gexSection = new GEXSection(gexInner, viewport);
+  volumeSection = new VolumeSection(volInner, viewport);
+}
+
+function updateGexMode() {
+  const gexInner = document.getElementById('gex-inner');
+  const volInner = document.getElementById('vol-inner');
+  if (!gexInner || !volInner) return;
+
+  if (state.gexMode === 'gex') {
+    gexInner.style.display = '';
+    volInner.style.display = 'none';
+  } else {
+    gexInner.style.display = 'none';
+    volInner.style.display = '';
+  }
+}
+
+function toggleGexPanel() {
+  state.gexPanelOpen = !state.gexPanelOpen;
+  const gexWrap = document.getElementById('chart-gex-wrap');
+  const arrow = document.getElementById('gex-toggle-arrow');
+
+  if (state.gexPanelOpen) {
+    gexWrap.classList.remove('collapsed');
+    gexWrap.classList.add('expanded');
+    arrow.classList.remove('collapsed');
+    arrow.classList.add('expanded');
+    arrow.textContent = '›';
+  } else {
+    gexWrap.classList.remove('expanded');
+    gexWrap.classList.add('collapsed');
+    arrow.classList.remove('expanded');
+    arrow.classList.add('collapsed');
+    arrow.textContent = '‹';
+  }
+}
+
+function loadSymbol(symbol) {
+  state.currentSymbol = symbol;
+  state.closeStream();
+  initChart();
+
+  state.allExpirations = [];
+  state.selectedExpirations = new Set();
+
+  document.getElementById('chart-symbol').textContent = symbol;
+  document.getElementById('chart-price').textContent = '--';
+  document.getElementById('chart-change').textContent = '--';
+  document.getElementById('chart-change').className = '';
+
+  viewport.clearPrice();
+  viewport.clearGEX();
+  bus.emit('viewport:change');
+
+  const priceParams = getPriceParams(state.activeFreq, state.activeRange);
+  state.activeStream = openStream(symbol, {
+    types: ['price', 'gex', 'quote', 'expiration'],
+    viewport,
+    priceParams,
+  });
+
+  switchTab('chart');
+}
+
+function setupBus() {
+  bus.on('data:quote', ({ symbol, quote }) => {
+    if (symbol !== state.currentSymbol) return;
+    const price = quote.price || 0;
+    const change = quote.change || 0;
+    const pct = quote.percentChange || 0;
+
+    document.getElementById('chart-price').textContent = price.toFixed(2);
+    const sign = change >= 0 ? '+' : '';
+    document.getElementById('chart-change').textContent = `${sign}${pct.toFixed(2)}%`;
+    document.getElementById('chart-change').className = change >= 0 ? 'up' : 'down';
+
+    updateWatchlistRowQuote(symbol, quote);
+  });
+
+  bus.on('data:gex-chunk', (gexData) => {
+    if (gexData.selectedExpirations) {
+      for (const d of gexData.selectedExpirations) state.selectedExpirations.add(d);
+    }
+  });
+
+  bus.on('data:expirations', (expirationDates) => {
+    state.allExpirations = expirationDates;
+  });
+}
+
+let watchlistData = [];
+let watchlistQuotes = new Map();
+let watchlistStreams = new Map();
+
+async function loadWatchlist() {
+  try {
+    const res = await fetch('/api/watchlist');
+    watchlistData = await res.json();
+  } catch {
+    watchlistData = [];
+  }
+  renderWatchlist();
+  openWatchlistStreams();
+}
+
+function renderWatchlist() {
+  const container = document.getElementById('wl-sections');
+  container.innerHTML = '';
+
+  for (const section of watchlistData) {
+    const header = document.createElement('div');
+    header.className = 'wl-section-header';
+    header.textContent = section.name;
+    container.appendChild(header);
+
+    for (const sym of section.symbols) {
+      const row = createWatchlistRow(sym);
+      container.appendChild(row);
+    }
+  }
+}
+
+function createWatchlistRow(symbol) {
+  const row = document.createElement('div');
+  row.className = 'wl-row';
+  row.dataset.symbol = symbol;
+
+  const quote = watchlistQuotes.get(symbol);
+  const price = quote ? quote.price.toFixed(2) : '--';
+  const name = quote ? (quote.description || '') : '';
+  const change = quote ? quote.percentChange : null;
+
+  let changeClass = '';
+  let changeText = '--';
+  if (change !== null) {
+    changeClass = change >= 0 ? 'up' : 'down';
+    const sign = change >= 0 ? '+' : '';
+    changeText = `${sign}${change.toFixed(2)}%`;
+  }
+
+  row.innerHTML = `
+    <div class="wl-row-top">
+      <span class="ticker">${symbol}</span>
+      <span class="price">${price}</span>
+    </div>
+    <div class="wl-row-bottom">
+      <span class="name">${name}</span>
+      <span class="change ${changeClass}">${changeText}</span>
+    </div>
+  `;
+
+  row.addEventListener('click', () => loadSymbol(symbol));
+  return row;
+}
+
+function updateWatchlistRowQuote(symbol, quote) {
+  watchlistQuotes.set(symbol, quote);
+  const row = document.querySelector(`.wl-row[data-symbol="${CSS.escape(symbol)}"]`);
+  if (!row) return;
+
+  row.querySelector('.price').textContent = (quote.price || 0).toFixed(2);
+  row.querySelector('.name').textContent = quote.description || '';
+
+  const changeEl = row.querySelector('.change');
+  const pct = quote.percentChange || 0;
+  const sign = pct >= 0 ? '+' : '';
+  changeEl.textContent = `${sign}${pct.toFixed(2)}%`;
+  changeEl.className = `change ${pct >= 0 ? 'up' : 'down'}`;
+}
+
+function openWatchlistStreams() {
+  closeWatchlistStreams();
+  const allSymbols = watchlistData.flatMap((s) => s.symbols);
+  for (const sym of allSymbols) {
+    const es = new EventSource(`/api/stream/${encodeURIComponent(sym)}?types=quote`);
+    es.addEventListener('quote', (e) => {
+      const quote = JSON.parse(e.data);
+      watchlistQuotes.set(sym, quote);
+    });
+    es.addEventListener('done', (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'quote') {
+        const quote = watchlistQuotes.get(sym);
+        if (quote) updateWatchlistRowQuote(sym, quote);
+      }
+      if (!data.type) es.close();
+    });
+    es.addEventListener('error', () => es.close());
+    watchlistStreams.set(sym, es);
+  }
+}
+
+function closeWatchlistStreams() {
+  for (const es of watchlistStreams.values()) es.close();
+  watchlistStreams.clear();
+}
+
+function showBottomSheet(content) {
+  const sheet = document.getElementById('bottom-sheet');
+  const body = document.getElementById('sheet-body');
+  body.innerHTML = content;
+  sheet.classList.remove('hidden');
+}
+
+function hideBottomSheet() {
+  document.getElementById('bottom-sheet').classList.add('hidden');
+}
+
+function showAddMenu() {
+  showBottomSheet(`
+    <h3>Add</h3>
+    <div class="sheet-option" id="sheet-add-symbol">Add Symbol</div>
+    <div class="sheet-option" id="sheet-add-section">Add Section</div>
+  `);
+  document.getElementById('sheet-add-symbol').addEventListener('click', showAddSymbolForm);
+  document.getElementById('sheet-add-section').addEventListener('click', showAddSectionForm);
+}
+
+function showAddSymbolForm() {
+  const sectionOptions = watchlistData.map((s, i) =>
+    `<div class="sheet-option" data-idx="${i}">${s.name}</div>`
+  ).join('');
+
+  showBottomSheet(`
+    <h3>Add Symbol</h3>
+    <input type="text" id="sheet-symbol-input" placeholder="Ticker (e.g. AAPL)" autocapitalize="characters" />
+    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Add to section:</p>
+    ${sectionOptions}
+  `);
+
+  const input = document.getElementById('sheet-symbol-input');
+  input.focus();
+
+  document.querySelectorAll('#sheet-body .sheet-option').forEach((opt) => {
+    opt.addEventListener('click', async () => {
+      const sym = input.value.trim().toUpperCase();
+      if (!sym) return;
+      const idx = parseInt(opt.dataset.idx);
+      const section = watchlistData[idx];
+      await fetch(`/api/watchlist/${encodeURIComponent(section.name)}/${encodeURIComponent(sym)}`, { method: 'POST' });
+      hideBottomSheet();
+      await loadWatchlist();
+    });
+  });
+}
+
+function showAddSectionForm() {
+  showBottomSheet(`
+    <h3>New Section</h3>
+    <input type="text" id="sheet-section-input" placeholder="Section name" />
+    <button class="sheet-action" id="sheet-create-section">Create</button>
+  `);
+
+  const input = document.getElementById('sheet-section-input');
+  input.focus();
+
+  document.getElementById('sheet-create-section').addEventListener('click', async () => {
+    const name = input.value.trim();
+    if (!name) return;
+    watchlistData.push({ name, symbols: [] });
+    await fetch('/api/watchlist', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(watchlistData),
+    });
+    hideBottomSheet();
+    renderWatchlist();
+  });
+}
+
+function setupToolbar() {
+  const pills = document.querySelectorAll('.interval-pills button');
+  pills.forEach((pill) => {
+    pill.addEventListener('click', () => {
+      pills.forEach((p) => p.classList.remove('active'));
+      pill.classList.add('active');
+      state.activeFreq = pill.dataset.freq;
+      state.activeRange = pill.dataset.range;
+      if (state.currentSymbol) {
+        state.closeStream();
+        const priceParams = getPriceParams(state.activeFreq, state.activeRange);
+        state.activeStream = openStream(state.currentSymbol, {
+          types: ['price'],
+          viewport,
+          priceParams,
+        });
+      }
+    });
+  });
+}
+
+async function init() {
+  const authed = await checkAuth();
+  if (!authed) {
+    document.getElementById('login-screen').style.display = 'flex';
+    return;
+  }
+
+  document.getElementById('app').classList.add('active');
+  setupBus();
+  setupToolbar();
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  document.getElementById('gex-toggle-arrow').addEventListener('click', toggleGexPanel);
+
+  document.querySelectorAll('#gex-mode-toggle button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#gex-mode-toggle button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      state.gexMode = btn.dataset.mode;
+      updateGexMode();
+    });
+  });
+
+  document.getElementById('wl-add-btn').addEventListener('click', showAddMenu);
+  document.querySelector('.sheet-backdrop')?.addEventListener('click', hideBottomSheet);
+
+  await loadWatchlist();
+
+  setupWatchlistReorder(document.getElementById('wl-sections'), async (newOrder) => {
+    const flat = watchlistData.flatMap((s) => s.symbols);
+    if (flat.join(',') !== newOrder.join(',')) {
+      watchlistData[0].symbols = newOrder.filter((s) => watchlistData.some((sec) => sec.symbols.includes(s)));
+      for (let i = 1; i < watchlistData.length; i++) {
+        watchlistData[i].symbols = watchlistData[i].symbols.filter((s) => !watchlistData[0].symbols.includes(s));
+      }
+      await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(watchlistData),
+      });
+    }
+  });
+}
+
+init();

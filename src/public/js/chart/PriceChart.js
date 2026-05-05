@@ -289,10 +289,111 @@ export class PriceChart extends BaseSection {
     this._chartDrag = { active: false, startX: 0, startY: 0, startViewStart: 0, startViewEnd: 0, startPriceMin: 0, startPriceMax: 0 };
     this._xAxisDrag = { active: false, startX: 0, startViewStart: 0, startViewEnd: 0, anchorFrac: 0 };
 
-    el.addEventListener('mousedown', (e) => {
+    // Gesture state
+    this._pointers = new Map(); // pointerId -> {x, y}
+    this._longPressTimer = null;
+    this._longPressCrosshair = false;
+    this._lastTapTime = 0;
+    this._lastTapX = 0;
+    this._lastTapY = 0;
+    this._pinchStartDist = 0;
+    this._pinchStartViewStart = 0;
+    this._pinchStartViewEnd = 0;
+    this._pinchAnchorFrac = 0;
+    this._pointerDownPos = { x: 0, y: 0 };
+
+    el.addEventListener('pointerdown', (e) => this._onPointerDown(e));
+    el.addEventListener('pointermove', (e) => this._onPointerMove(e));
+    el.addEventListener('pointerup', (e) => this._onPointerUp(e));
+    el.addEventListener('pointercancel', (e) => this._onPointerUp(e));
+    el.addEventListener('pointerleave', (e) => this._onPointerLeave(e));
+
+    el.addEventListener('wheel', (e) => {
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
+      const s = this.sectionBounds();
+      const inCandle = mx >= s.candle.left && mx <= s.candle.right && my <= (this.height - this._marginBottom());
+      if (!inCandle) return;
+
+      e.preventDefault();
+      const vp = this.viewport;
+      const zoomFactor = Math.pow(1.03, e.deltaY > 0 ? 1 : -1);
+
+      const anchorFrac = (mx - s.candle.left) / s.candle.width;
+      const visCount = vp.viewEndIdx - vp.viewStartIdx;
+      const anchorIdx = vp.viewStartIdx + anchorFrac * visCount;
+      const newCount = Math.max(5, visCount * zoomFactor);
+      vp.viewStartIdx = anchorIdx - anchorFrac * newCount;
+      vp.viewEndIdx = anchorIdx + (1 - anchorFrac) * newCount;
+
+      const priceFrac = 1 - (my - (this.height - this.sectionBounds().top)) / this._chartH();
+      const priceRange = vp.viewPriceMax - vp.viewPriceMin;
+      const anchorPrice = vp.viewPriceMin + priceFrac * priceRange;
+      const newRange = Math.max(0.01, priceRange * zoomFactor);
+      vp.viewPriceMin = anchorPrice - priceFrac * newRange;
+      vp.viewPriceMax = anchorPrice + (1 - priceFrac) * newRange;
+      vp._manualYScale = true;
+
+      bus.emit('viewport:change');
+    }, { passive: false });
+  }
+
+  _onPointerDown(e) {
+    const el = this.container;
+    this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    el.setPointerCapture(e.pointerId);
+
+    // Two-finger pinch start
+    if (this._pointers.size === 2) {
+      this._cancelLongPress();
+      this._axisDrag.active = false;
+      this._chartDrag.active = false;
+      this._xAxisDrag.active = false;
+      this._longPressCrosshair = false;
+      this._startPinch();
+      return;
+    }
+
+    // Single pointer down
+    if (this._pointers.size === 1) {
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      this._pointerDownPos = { x: e.clientX, y: e.clientY };
+
+      // Double-tap detection
+      const now = performance.now();
+      const dt = now - this._lastTapTime;
+      const dx = Math.abs(mx - this._lastTapX);
+      const dy = Math.abs(my - this._lastTapY);
+      if (dt < 300 && dx < 20 && dy < 20) {
+        this._cancelLongPress();
+        this._handleDoubleTap(mx);
+        this._lastTapTime = 0;
+        return;
+      }
+      this._lastTapTime = now;
+      this._lastTapX = mx;
+      this._lastTapY = my;
+
+      // Start long-press timer for touch crosshair
+      this._cancelLongPress();
+      this._longPressTimer = setTimeout(() => {
+        this._longPressTimer = null;
+        // Only activate if pointer hasn't moved much and no drag is active
+        if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) {
+          this._longPressCrosshair = true;
+          const rect2 = el.getBoundingClientRect();
+          const ptr = this._pointers.values().next().value;
+          if (ptr) {
+            this._showCrosshairAt(ptr.x - rect2.left, ptr.y - rect2.top);
+          }
+        }
+      }, 500);
+
+      // Start drag regions (same logic as old mousedown)
       const s = this.sectionBounds();
       const vp = this.viewport;
       const inXAxis = my > (this.height - this._marginBottom()) && mx >= s.candle.left && mx <= s.candle.right;
@@ -326,70 +427,184 @@ export class PriceChart extends BaseSection {
         vp._manualYScale = true;
         el.style.cursor = 'grabbing';
       }
-    });
+    }
+  }
 
-    this._onMouseMove = (e) => this._handleMouseMove(e);
-    this._onMouseUp = () => this._handleMouseUp();
-    window.addEventListener('mousemove', this._onMouseMove);
-    window.addEventListener('mouseup', this._onMouseUp);
+  _onPointerMove(e) {
+    const el = this.container;
 
-    el.addEventListener('dblclick', (e) => {
-      const rect = el.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const s = this.sectionBounds();
-      const vp = this.viewport;
-      if (mx >= s.axis.left && mx <= s.axis.right) {
-        vp._manualYScale = false;
-        vp._autoFitY();
-        bus.emit('viewport:change');
-      } else if (mx >= s.candle.left && mx <= s.candle.right) {
-        vp._manualYScale = false;
-        vp.viewStartIdx = 0;
-        vp.viewEndIdx = vp.priceData.length;
-        vp._autoFitY();
-        bus.emit('viewport:change');
+    // Update pointer position
+    if (this._pointers.has(e.pointerId)) {
+      this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // Cancel long-press if pointer moved too far
+    if (this._longPressTimer) {
+      const dx = e.clientX - this._pointerDownPos.x;
+      const dy = e.clientY - this._pointerDownPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 10) {
+        this._cancelLongPress();
       }
-    });
+    }
 
-    el.addEventListener('mouseleave', () => {
-      if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active) {
-        this._hideCrosshair();
-        bus.emit('interaction:crosshair', null);
-      }
-    });
+    // Pinch zoom (2 pointers)
+    if (this._pointers.size === 2 && this._pinchStartDist > 0) {
+      this._handlePinch();
+      return;
+    }
 
-    el.addEventListener('wheel', (e) => {
+    // Long-press crosshair mode: update crosshair position
+    if (this._longPressCrosshair && this._pointers.size === 1) {
       const rect = el.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
-      const s = this.sectionBounds();
-      const inCandle = mx >= s.candle.left && mx <= s.candle.right && my <= (this.height - this._marginBottom());
-      if (!inCandle) return;
+      this._showCrosshairAt(mx, my);
+      return;
+    }
 
-      e.preventDefault();
-      const vp = this.viewport;
-      const zoomFactor = Math.pow(1.03, e.deltaY > 0 ? 1 : -1);
-
-      const anchorFrac = (mx - s.candle.left) / s.candle.width;
-      const visCount = vp.viewEndIdx - vp.viewStartIdx;
-      const anchorIdx = vp.viewStartIdx + anchorFrac * visCount;
-      const newCount = Math.max(5, visCount * zoomFactor);
-      vp.viewStartIdx = anchorIdx - anchorFrac * newCount;
-      vp.viewEndIdx = anchorIdx + (1 - anchorFrac) * newCount;
-
-      const priceFrac = 1 - (my - (this.height - this.sectionBounds().top)) / this._chartH();
-      const priceRange = vp.viewPriceMax - vp.viewPriceMin;
-      const anchorPrice = vp.viewPriceMin + priceFrac * priceRange;
-      const newRange = Math.max(0.01, priceRange * zoomFactor);
-      vp.viewPriceMin = anchorPrice - priceFrac * newRange;
-      vp.viewPriceMax = anchorPrice + (1 - priceFrac) * newRange;
-      vp._manualYScale = true;
-
-      bus.emit('viewport:change');
-    }, { passive: false });
+    // Single pointer drag or hover
+    if (this._pointers.size <= 1) {
+      this._handleDragMove(e);
+    }
   }
 
-  _handleMouseMove(e) {
+  _onPointerUp(e) {
+    const el = this.container;
+    this._pointers.delete(e.pointerId);
+
+    try { el.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+
+    this._cancelLongPress();
+
+    // If we were pinching and now have < 2 pointers, end pinch
+    if (this._pinchStartDist > 0 && this._pointers.size < 2) {
+      this._pinchStartDist = 0;
+    }
+
+    // End long-press crosshair on lift
+    if (this._longPressCrosshair && this._pointers.size === 0) {
+      this._longPressCrosshair = false;
+      this._hideCrosshair();
+      bus.emit('interaction:crosshair', null);
+    }
+
+    // End drags when all pointers are up
+    if (this._pointers.size === 0) {
+      this._handleDragEnd();
+    }
+  }
+
+  _onPointerLeave(e) {
+    // Only hide crosshair if no active drags and no captured pointers
+    if (!this._axisDrag.active && !this._chartDrag.active && !this._xAxisDrag.active && !this._longPressCrosshair && this._pointers.size === 0) {
+      this._hideCrosshair();
+      bus.emit('interaction:crosshair', null);
+    }
+  }
+
+  _startPinch() {
+    const pts = [...this._pointers.values()];
+    const dx = pts[1].x - pts[0].x;
+    const dy = pts[1].y - pts[0].y;
+    this._pinchStartDist = Math.sqrt(dx * dx + dy * dy);
+
+    const vp = this.viewport;
+    this._pinchStartViewStart = vp.viewStartIdx;
+    this._pinchStartViewEnd = vp.viewEndIdx;
+
+    // Anchor at midpoint of two fingers
+    const el = this.container;
+    const rect = el.getBoundingClientRect();
+    const midX = (pts[0].x + pts[1].x) / 2 - rect.left;
+    const s = this.sectionBounds();
+    this._pinchAnchorFrac = (midX - s.candle.left) / s.candle.width;
+  }
+
+  _handlePinch() {
+    const pts = [...this._pointers.values()];
+    if (pts.length < 2) return;
+
+    const dx = pts[1].x - pts[0].x;
+    const dy = pts[1].y - pts[0].y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (this._pinchStartDist === 0) return;
+
+    const scale = this._pinchStartDist / dist; // >1 means zoom out, <1 means zoom in
+    const origCount = this._pinchStartViewEnd - this._pinchStartViewStart;
+    const newCount = Math.max(5, origCount * scale);
+
+    const vp = this.viewport;
+    const anchorIdx = this._pinchStartViewStart + this._pinchAnchorFrac * origCount;
+    vp.viewStartIdx = anchorIdx - this._pinchAnchorFrac * newCount;
+    vp.viewEndIdx = anchorIdx + (1 - this._pinchAnchorFrac) * newCount;
+
+    bus.emit('viewport:change');
+  }
+
+  _handleDoubleTap(mx) {
+    const s = this.sectionBounds();
+    const vp = this.viewport;
+    if (mx >= s.axis.left && mx <= s.axis.right) {
+      vp._manualYScale = false;
+      vp._autoFitY();
+      bus.emit('viewport:change');
+    } else if (mx >= s.candle.left && mx <= s.candle.right) {
+      vp._manualYScale = false;
+      vp.viewStartIdx = 0;
+      vp.viewEndIdx = vp.priceData.length;
+      vp._autoFitY();
+      bus.emit('viewport:change');
+    }
+  }
+
+  _cancelLongPress() {
+    if (this._longPressTimer) {
+      clearTimeout(this._longPressTimer);
+      this._longPressTimer = null;
+    }
+  }
+
+  _showCrosshairAt(mx, my) {
+    const s = this.sectionBounds();
+
+    this._crosshairH.style.display = 'block';
+    this._crosshairV.style.display = 'block';
+    this._crosshairH.style.top = my + 'px';
+    this._crosshairV.style.left = mx + 'px';
+
+    const price = this.yToPrice(this.height - my);
+    this._crosshairPrice.style.display = 'block';
+    this._crosshairPrice.style.top = my + 'px';
+    this._crosshairPrice.style.left = s.axis.left + 2 + 'px';
+    this._crosshairPrice.textContent = price.toFixed(price >= 1000 ? 0 : 2);
+
+    bus.emit('interaction:crosshair', { price, mx, my, source: 'price' });
+  }
+
+  _handleHoverCrosshair(e) {
+    const el = this.container;
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (mx >= 0 && mx <= this.width && my >= 0 && my <= this.height) {
+      const s = this.sectionBounds();
+      const inXAxis = my > (this.height - this._marginBottom()) && mx >= s.candle.left && mx <= s.candle.right;
+      if (inXAxis) {
+        el.style.cursor = 'ew-resize';
+      } else if (mx >= s.axis.left && mx <= s.axis.right) {
+        el.style.cursor = 'ns-resize';
+      } else if (mx >= s.candle.left && mx <= s.candle.right) {
+        el.style.cursor = 'grab';
+      } else {
+        el.style.cursor = '';
+      }
+
+      this._showCrosshairAt(mx, my);
+    }
+  }
+
+  _handleDragMove(e) {
     const vp = this.viewport;
     const el = this.container;
 
@@ -437,36 +652,23 @@ export class PriceChart extends BaseSection {
       return;
     }
 
-    // Crosshair
-    const rect = el.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    // Hover crosshair (no button pressed, no active drag)
+    this._handleHoverCrosshair(e);
+  }
 
-    if (mx >= 0 && mx <= this.width && my >= 0 && my <= this.height) {
-      const s = this.sectionBounds();
-      const inXAxis = my > (this.height - this._marginBottom()) && mx >= s.candle.left && mx <= s.candle.right;
-      if (inXAxis) {
-        el.style.cursor = 'ew-resize';
-      } else if (mx >= s.axis.left && mx <= s.axis.right) {
-        el.style.cursor = 'ns-resize';
-      } else if (mx >= s.candle.left && mx <= s.candle.right) {
-        el.style.cursor = 'grab';
-      } else {
-        el.style.cursor = '';
-      }
-
-      this._crosshairH.style.display = 'block';
-      this._crosshairV.style.display = 'block';
-      this._crosshairH.style.top = my + 'px';
-      this._crosshairV.style.left = mx + 'px';
-
-      const price = this.yToPrice(this.height - my);
-      this._crosshairPrice.style.display = 'block';
-      this._crosshairPrice.style.top = my + 'px';
-      this._crosshairPrice.style.left = s.axis.left + 2 + 'px';
-      this._crosshairPrice.textContent = price.toFixed(price >= 1000 ? 0 : 2);
-
-      bus.emit('interaction:crosshair', { price, mx, my, source: 'price' });
+  _handleDragEnd() {
+    const el = this.container;
+    if (this._axisDrag.active) {
+      this._axisDrag.active = false;
+      el.style.cursor = '';
+    }
+    if (this._chartDrag.active) {
+      this._chartDrag.active = false;
+      el.style.cursor = '';
+    }
+    if (this._xAxisDrag.active) {
+      this._xAxisDrag.active = false;
+      el.style.cursor = '';
     }
   }
 
@@ -496,25 +698,8 @@ export class PriceChart extends BaseSection {
     this._crosshairPrice.style.display = 'none';
   }
 
-  _handleMouseUp() {
-    const el = this.container;
-    if (this._axisDrag.active) {
-      this._axisDrag.active = false;
-      el.style.cursor = '';
-    }
-    if (this._chartDrag.active) {
-      this._chartDrag.active = false;
-      el.style.cursor = '';
-    }
-    if (this._xAxisDrag.active) {
-      this._xAxisDrag.active = false;
-      el.style.cursor = '';
-    }
-  }
-
   dispose() {
-    window.removeEventListener('mousemove', this._onMouseMove);
-    window.removeEventListener('mouseup', this._onMouseUp);
+    this._cancelLongPress();
     for (const unsub of this._unsubs) unsub();
     super.dispose();
   }
