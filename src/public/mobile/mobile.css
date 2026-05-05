@@ -436,6 +436,53 @@ html, body {
   color: #fff;
 }
 
+.gex-scale-label {
+  position: absolute;
+  bottom: 2px;
+  font-size: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.gex-mode-toggle {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: flex;
+  gap: 2px;
+  z-index: 5;
+}
+
+.gex-mode-toggle button {
+  padding: 2px 6px;
+  font-size: 9px;
+  border: none;
+  border-radius: 3px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.gex-mode-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tooltip {
+  position: absolute;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  color: var(--text-primary);
+  pointer-events: none;
+  display: none;
+  white-space: nowrap;
+  z-index: 10;
+}
+
 .section-loading {
   display: none;
   position: absolute;
