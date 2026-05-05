@@ -42,6 +42,12 @@ function initChart() {
   viewport = new ViewportModel();
 
   const priceWrap = document.getElementById('chart-price-wrap');
+  priceChart = new PriceChart(priceWrap, viewport);
+  priceChart.scene.background = new THREE.Color(0x000000);
+}
+
+function initGexPanel() {
+  if (gexSection) return;
   const gexContainer = document.getElementById('gex-chart-container');
 
   const gexInner = document.createElement('div');
@@ -54,13 +60,9 @@ function initChart() {
   volInner.style.cssText = 'position:absolute;inset:0;display:none;';
   gexContainer.appendChild(volInner);
 
-  priceChart = new PriceChart(priceWrap, viewport);
+  const black = new THREE.Color(0x000000);
   gexSection = new GEXSection(gexInner, viewport);
   volumeSection = new VolumeSection(volInner, viewport);
-
-  // Override chart backgrounds to pure black for mobile
-  const black = new THREE.Color(0x000000);
-  priceChart.scene.background = black;
   gexSection.scene.background = black;
   volumeSection.scene.background = black;
 }
@@ -90,6 +92,11 @@ function toggleGexPanel() {
     arrow.classList.remove('collapsed');
     arrow.classList.add('expanded');
     arrow.textContent = '›';
+    // Init GEX sections after panel finishes expanding
+    gexWrap.addEventListener('transitionend', () => {
+      initGexPanel();
+      updateGexMode();
+    }, { once: true });
   } else {
     gexWrap.classList.remove('expanded');
     gexWrap.classList.add('collapsed');
