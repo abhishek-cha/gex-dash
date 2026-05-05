@@ -20,12 +20,17 @@
 }
 
 html, body {
+  height: 100dvh;
   height: 100%;
   overflow: hidden;
   background: var(--bg-app);
   color: var(--text-primary);
   font-family: -apple-system, BlinkMacSystemFont, 'Trebuchet MS', system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
+}
+
+@supports (height: 100dvh) {
+  html, body { height: 100dvh; }
 }
 
 #login-screen {
@@ -84,7 +89,7 @@ html, body {
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--bg-app);
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .tab-btn {
