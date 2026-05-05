@@ -101,6 +101,7 @@ function loadSymbol(symbol) {
   state.selectedExpirations = new Set();
 
   document.getElementById('chart-symbol').textContent = symbol;
+  document.getElementById('toolbar-symbol').textContent = symbol;
   document.getElementById('chart-price').textContent = '--';
   document.getElementById('chart-change').textContent = '--';
   document.getElementById('chart-change').className = '';
@@ -147,7 +148,6 @@ function setupBus() {
 
 let watchlistData = [];
 let watchlistQuotes = new Map();
-let watchlistStreams = new Map();
 
 async function loadWatchlist() {
   try {
@@ -185,14 +185,15 @@ function createWatchlistRow(symbol) {
   const quote = watchlistQuotes.get(symbol);
   const price = quote ? quote.price.toFixed(2) : '--';
   const name = quote ? (quote.description || '') : '';
-  const change = quote ? quote.percentChange : null;
+  const change = quote ? quote.change : null;
+  const pct = quote ? quote.percentChange : null;
 
   let changeClass = '';
   let changeText = '--';
   if (change !== null) {
     changeClass = change >= 0 ? 'up' : 'down';
     const sign = change >= 0 ? '+' : '';
-    changeText = `${sign}${change.toFixed(2)}%`;
+    changeText = `${sign}${change.toFixed(2)} ${sign}${pct.toFixed(2)}%`;
   }
 
   row.innerHTML = `
@@ -219,14 +220,22 @@ function updateWatchlistRowQuote(symbol, quote) {
   row.querySelector('.name').textContent = quote.description || '';
 
   const changeEl = row.querySelector('.change');
+  const chg = quote.change || 0;
   const pct = quote.percentChange || 0;
-  const sign = pct >= 0 ? '+' : '';
-  changeEl.textContent = `${sign}${pct.toFixed(2)}%`;
-  changeEl.className = `change ${pct >= 0 ? 'up' : 'down'}`;
+  const sign = chg >= 0 ? '+' : '';
+  changeEl.textContent = `${sign}${chg.toFixed(2)} ${sign}${pct.toFixed(2)}%`;
+  changeEl.className = `change ${chg >= 0 ? 'up' : 'down'}`;
 }
+
+let watchlistPollTimer = null;
 
 function openWatchlistStreams() {
   closeWatchlistStreams();
+  fetchAllQuotes();
+  watchlistPollTimer = setInterval(fetchAllQuotes, 30000);
+}
+
+function fetchAllQuotes() {
   const allSymbols = watchlistData.flatMap((s) => s.symbols);
   for (const sym of allSymbols) {
     const es = new EventSource(`/api/stream/${encodeURIComponent(sym)}?types=quote`);
@@ -243,13 +252,14 @@ function openWatchlistStreams() {
       if (!data.type) es.close();
     });
     es.addEventListener('error', () => es.close());
-    watchlistStreams.set(sym, es);
   }
 }
 
 function closeWatchlistStreams() {
-  for (const es of watchlistStreams.values()) es.close();
-  watchlistStreams.clear();
+  if (watchlistPollTimer) {
+    clearInterval(watchlistPollTimer);
+    watchlistPollTimer = null;
+  }
 }
 
 function showBottomSheet(content) {

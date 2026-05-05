@@ -199,20 +199,16 @@ html, body {
 }
 
 .wl-row-bottom .change {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 2px 6px;
-  border-radius: 3px;
 }
 
 .wl-row-bottom .change.up {
   color: var(--green);
-  background: var(--badge-green-bg);
 }
 
 .wl-row-bottom .change.down {
   color: var(--red);
-  background: var(--badge-red-bg);
 }
 
 #chart-header {
@@ -337,6 +333,12 @@ html, body {
   align-items: center;
   padding: 8px 12px;
   gap: 8px;
+}
+
+.toolbar-symbol {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .interval-pills {
