@@ -1,36 +1,68 @@
 const LONG_PRESS_MS = 500;
 
-export function setupWatchlistReorder(container, onReorder) {
+let editMode = false;
+let onDeleteCb = null;
+let onReorderCb = null;
+let containerEl = null;
+
+export function setupWatchlistReorder(container, { onReorder, onDelete }) {
+  containerEl = container;
+  onReorderCb = onReorder;
+  onDeleteCb = onDelete;
+
   let pressTimer = null;
   let startY = 0;
   let dragRow = null;
   let placeholder = null;
 
   container.addEventListener('pointerdown', (e) => {
-    const row = e.target.closest('.wl-row');
+    const deleteBtn = e.target.closest('.wl-delete-btn');
+    if (deleteBtn) return;
+
+    const row = e.target.closest('.wl-row, .wl-section-header');
     if (!row) return;
 
-    startY = e.clientY;
-    pressTimer = setTimeout(() => {
-      startDrag(row, e);
-    }, LONG_PRESS_MS);
+    if (editMode && row.classList.contains('wl-row')) {
+      startY = e.clientY;
+      pressTimer = setTimeout(() => startDrag(row, e), 200);
 
-    const onMoveCancel = (ev) => {
-      if (Math.abs(ev.clientY - startY) > 10) {
+      const onMoveCancel = (ev) => {
+        if (Math.abs(ev.clientY - startY) > 10) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+        }
+      };
+      container.addEventListener('pointermove', onMoveCancel, { once: false });
+      container.addEventListener('pointerup', () => {
+        clearTimeout(pressTimer);
+        container.removeEventListener('pointermove', onMoveCancel);
+      }, { once: true });
+      return;
+    }
+
+    if (!editMode) {
+      startY = e.clientY;
+      pressTimer = setTimeout(() => {
+        enterEditMode();
+      }, LONG_PRESS_MS);
+
+      const onMoveCancel = (ev) => {
+        if (Math.abs(ev.clientY - startY) > 10) {
+          clearTimeout(pressTimer);
+          pressTimer = null;
+          container.removeEventListener('pointermove', onMoveCancel);
+        }
+      };
+      container.addEventListener('pointermove', onMoveCancel, { once: false });
+
+      const cleanup = () => {
         clearTimeout(pressTimer);
         pressTimer = null;
         container.removeEventListener('pointermove', onMoveCancel);
-      }
-    };
-    container.addEventListener('pointermove', onMoveCancel, { once: false });
-
-    const cleanup = () => {
-      clearTimeout(pressTimer);
-      pressTimer = null;
-      container.removeEventListener('pointermove', onMoveCancel);
-    };
-    container.addEventListener('pointerup', cleanup, { once: true });
-    container.addEventListener('pointercancel', cleanup, { once: true });
+      };
+      container.addEventListener('pointerup', cleanup, { once: true });
+      container.addEventListener('pointercancel', cleanup, { once: true });
+    }
   });
 
   function startDrag(row, e) {
@@ -94,9 +126,62 @@ export function setupWatchlistReorder(container, onReorder) {
     }
 
     const newOrder = [...container.querySelectorAll('.wl-row')].map((r) => r.dataset.symbol);
-    onReorder(newOrder);
+    if (onReorderCb) onReorderCb(newOrder);
 
     dragRow = null;
     placeholder = null;
   }
+}
+
+function enterEditMode() {
+  if (editMode) return;
+  editMode = true;
+  containerEl.classList.add('edit-mode');
+
+  // Add delete buttons to all rows
+  containerEl.querySelectorAll('.wl-row').forEach((row) => {
+    addDeleteBtn(row, 'symbol');
+  });
+
+  // Add delete buttons to section headers
+  containerEl.querySelectorAll('.wl-section-header').forEach((header) => {
+    addDeleteBtn(header, 'section');
+  });
+
+  // Add Done button at top
+  const doneBar = document.createElement('div');
+  doneBar.className = 'wl-edit-done-bar';
+  doneBar.innerHTML = '<button class="wl-done-btn">Done</button>';
+  containerEl.insertBefore(doneBar, containerEl.firstChild);
+  doneBar.querySelector('.wl-done-btn').addEventListener('click', exitEditMode);
+}
+
+function addDeleteBtn(el, type) {
+  const btn = document.createElement('button');
+  btn.className = 'wl-delete-btn';
+  btn.textContent = '−';
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (type === 'symbol') {
+      const sym = el.dataset.symbol;
+      if (onDeleteCb) onDeleteCb({ type: 'symbol', symbol: sym });
+    } else {
+      const name = el.textContent.replace('−', '').trim();
+      if (onDeleteCb) onDeleteCb({ type: 'section', section: name });
+    }
+  });
+  el.appendChild(btn);
+}
+
+export function exitEditMode() {
+  if (!editMode) return;
+  editMode = false;
+  containerEl.classList.remove('edit-mode');
+
+  // Remove all delete buttons
+  containerEl.querySelectorAll('.wl-delete-btn').forEach((btn) => btn.remove());
+
+  // Remove done bar
+  const doneBar = containerEl.querySelector('.wl-edit-done-bar');
+  if (doneBar) doneBar.remove();
 }

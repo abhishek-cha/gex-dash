@@ -5,7 +5,7 @@ import { ViewportModel } from '/js/chart/ViewportModel.js';
 import { PriceChart } from '/js/chart/PriceChart.js';
 import { GEXSection } from '/js/chart/GEXSection.js';
 import { VolumeSection } from '/js/chart/VolumeSection.js';
-import { setupWatchlistReorder } from '/mobile/touch.js';
+import { setupWatchlistReorder, exitEditMode } from '/mobile/touch.js';
 
 const state = {
   currentSymbol: null,
@@ -528,19 +528,41 @@ async function init() {
 
   await loadWatchlist();
 
-  setupWatchlistReorder(document.getElementById('wl-sections'), async (newOrder) => {
-    const flat = watchlistData.flatMap((s) => s.symbols);
-    if (flat.join(',') !== newOrder.join(',')) {
-      watchlistData[0].symbols = newOrder.filter((s) => watchlistData.some((sec) => sec.symbols.includes(s)));
-      for (let i = 1; i < watchlistData.length; i++) {
-        watchlistData[i].symbols = watchlistData[i].symbols.filter((s) => !watchlistData[0].symbols.includes(s));
+  setupWatchlistReorder(document.getElementById('wl-sections'), {
+    onReorder: async (newOrder) => {
+      const flat = watchlistData.flatMap((s) => s.symbols);
+      if (flat.join(',') !== newOrder.join(',')) {
+        watchlistData[0].symbols = newOrder.filter((s) => watchlistData.some((sec) => sec.symbols.includes(s)));
+        for (let i = 1; i < watchlistData.length; i++) {
+          watchlistData[i].symbols = watchlistData[i].symbols.filter((s) => !watchlistData[0].symbols.includes(s));
+        }
+        await fetch('/api/watchlist', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(watchlistData),
+        });
       }
-      await fetch('/api/watchlist', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(watchlistData),
-      });
-    }
+    },
+    onDelete: async ({ type, symbol, section }) => {
+      if (type === 'symbol') {
+        for (const sec of watchlistData) {
+          const idx = sec.symbols.indexOf(symbol);
+          if (idx >= 0) {
+            await fetch(`/api/watchlist/${encodeURIComponent(sec.name)}/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
+            break;
+          }
+        }
+      } else if (type === 'section') {
+        watchlistData = watchlistData.filter((s) => s.name !== section);
+        await fetch('/api/watchlist', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(watchlistData),
+        });
+      }
+      exitEditMode();
+      await loadWatchlist();
+    },
   });
 }
 
