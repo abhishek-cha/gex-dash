@@ -50,6 +50,7 @@ async function streamQuote(
       price: quote.lastPrice ?? quote.mark ?? 0,
       change: quote.netChange ?? 0,
       percentChange: quote.netPercentChange ?? 0,
+      description: quote.description ?? '',
     });
   }
 }
