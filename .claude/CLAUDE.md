@@ -57,7 +57,7 @@ src/
         ├── index.html         # Mobile PWA shell: tab layout, meta tags, service worker
         ├── mobile.css         # TradingView dark theme (#000 bg, #2962ff accent)
         ├── mobile.js          # App shell: tabs, watchlist, chart init, picker wheels, bottom sheet
-        ├── touch.js           # Long-press edit mode (delete buttons), drag-to-reorder
+        ├── touch.js           # Swipe-to-delete, long-press drag-to-reorder
         ├── manifest.json      # PWA manifest (standalone, black theme)
         └── sw.js              # Service worker: shell caching, network-first for API
 ```
@@ -83,11 +83,10 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 ### Mobile Frontend (`/mobile/`)
 
 - Separate PWA entry point sharing chart modules (`PriceChart`, `GEXSection`, `VolumeSection`, `ViewportModel`, `EventBus`, `api.js`).
-- Two tabs: Watchlist (two-line rows: ticker+price / name+change%, 30s quote polling) and Chart (full-width candles, collapsible 70/30 GEX panel).
-- GEX/Volume sections deferred — only instantiated after panel expand transition completes (avoids 0-width Three.js init).
-- Bottom toolbar: vertical picker wheels for symbol/freq/range.
-- iOS action sheet-style bottom sheet (blur backdrop, swipe dismiss) for add symbol/section.
-- Long-press enters edit mode: red delete buttons on all rows and section headers, drag to reorder.
+- Two tabs: Watchlist (two-line rows: ticker+price / name+change%, 30s quote polling) and Chart (full-width candles, GEX/Volume panel via view selector).
+- GEX/Volume panel: 70/30 split when active. Section created on demand via `setView()` after layout reflow. Canvas uses `position: absolute` + `width/height: 100% !important` to prevent flex sizing feedback loops.
+- Bottom toolbar: native `<select>` dropdowns for symbol, frequency, range, and view mode (Chart Only / Chart + GEX / Chart + Volume). Horizontally scrollable. Expiration multi-select with All/Clear buttons shown only in GEX/Volume modes.
+- Watchlist: swipe left to reveal delete button, long-press to drag-reorder. + button is a native `<select>` that opens a dark `<dialog>` for input.
 - `user-select: none` + `-webkit-touch-callout: none` globally to suppress native selection on long-press.
 
 ## Key Patterns
@@ -111,6 +110,6 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 
 **Adding chart rendering**: Add to relevant section's `rebuild()`. Use `makePlane()`, `makeLine()`, `batchPlanes()` from BaseSection.
 
-**Mobile changes**: Edit files in `src/public/mobile/`. Chart rendering is shared — mobile-specific behavior lives in `mobile.js` and `touch.js`. Update `sw.js` SHELL_ASSETS if adding new files.
+**Mobile changes**: Edit files in `src/public/mobile/`. Chart rendering is shared — mobile-specific behavior lives in `mobile.js` and `touch.js`. Mobile canvas containers use `position: absolute` + `!important` sizing to avoid flex feedback loops. Update `sw.js` SHELL_ASSETS if adding new files.
 
 See [README.md](../README.md) for user-facing documentation, API endpoints, and chart interactions.

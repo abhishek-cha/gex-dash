@@ -61,10 +61,10 @@ npm start        # run compiled output
 
 Access the mobile view at `https://<HOST>:<PORT>/mobile/`. Add to home screen for a full-screen PWA experience.
 
-- **Watchlist tab** — Two-line rows (ticker + price / company name + change%). Long-press to enter edit mode (delete symbols/sections). Tap a row to load its chart.
-- **Chart tab** — Full-width candlestick chart with collapsible GEX/Volume panel (tap arrow on right edge). Touch gestures: one-finger pan, pinch to zoom, long-press for crosshair, double-tap to reset.
-- **Bottom toolbar** — Vertical scroll wheels to cycle through watchlist symbols, candle intervals (5m–1M), and date ranges (5D–5Y).
-- **Add** — Tap + to add symbols or create new sections via iOS-style action sheet.
+- **Watchlist tab** — Two-line rows (ticker + price / company name + change%). Swipe left to delete, long-press to drag-reorder. Tap a row to load its chart.
+- **Chart tab** — Full-width candlestick chart. Select "Chart + GEX" or "Chart + Volume" in the toolbar to show a 70/30 split panel. Touch gestures: one-finger pan, pinch to zoom, long-press for crosshair, double-tap to reset.
+- **Bottom toolbar** — Native select dropdowns for symbol, candle interval (5m–1M), date range (5D–5Y), and view mode. Expiration multi-select with All/Clear shown in GEX/Volume modes.
+- **Add** — Tap + to add symbols or create new sections via native dialog.
 
 ## Chart Interactions
 
