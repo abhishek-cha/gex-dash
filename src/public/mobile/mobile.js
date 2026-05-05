@@ -267,17 +267,53 @@ function showBottomSheet(content) {
   const body = document.getElementById('sheet-body');
   body.innerHTML = content;
   sheet.classList.remove('hidden');
+  setupSheetSwipeDismiss();
 }
 
 function hideBottomSheet() {
-  document.getElementById('bottom-sheet').classList.add('hidden');
+  const sheet = document.getElementById('bottom-sheet');
+  const sheetContent = sheet.querySelector('.sheet-content');
+  sheetContent.style.transform = '';
+  sheet.classList.add('hidden');
+}
+
+function setupSheetSwipeDismiss() {
+  const sheet = document.getElementById('bottom-sheet');
+  const content = sheet.querySelector('.sheet-content');
+  let startY = 0;
+  let currentY = 0;
+
+  content.addEventListener('touchstart', (e) => {
+    startY = e.touches[0].clientY;
+    content.style.transition = 'none';
+  }, { passive: true });
+
+  content.addEventListener('touchmove', (e) => {
+    currentY = e.touches[0].clientY;
+    const dy = currentY - startY;
+    if (dy > 0) {
+      content.style.transform = `translateY(${dy}px)`;
+    }
+  }, { passive: true });
+
+  content.addEventListener('touchend', () => {
+    content.style.transition = 'transform 0.2s ease';
+    const dy = currentY - startY;
+    if (dy > 80) {
+      content.style.transform = `translateY(100%)`;
+      setTimeout(hideBottomSheet, 200);
+    } else {
+      content.style.transform = '';
+    }
+    startY = 0;
+    currentY = 0;
+  });
 }
 
 function showAddMenu() {
   showBottomSheet(`
-    <h3>Add</h3>
     <div class="sheet-option" id="sheet-add-symbol">Add Symbol</div>
-    <div class="sheet-option" id="sheet-add-section">Add Section</div>
+    <div class="sheet-option" id="sheet-add-section">New Section</div>
   `);
   document.getElementById('sheet-add-symbol').addEventListener('click', showAddSymbolForm);
   document.getElementById('sheet-add-section').addEventListener('click', showAddSectionForm);
@@ -384,6 +420,7 @@ async function init() {
 
   document.getElementById('wl-add-btn').addEventListener('click', showAddMenu);
   document.querySelector('.sheet-backdrop')?.addEventListener('click', hideBottomSheet);
+  document.getElementById('sheet-cancel')?.addEventListener('click', hideBottomSheet);
 
   await loadWatchlist();
 

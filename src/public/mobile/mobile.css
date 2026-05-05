@@ -384,6 +384,8 @@ html, body {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  padding: 0 8px;
+  padding-bottom: env(safe-area-inset-bottom, 8px);
 }
 
 #bottom-sheet.hidden {
@@ -393,70 +395,98 @@ html, body {
 .sheet-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .sheet-content {
   position: relative;
-  background: var(--bg-card);
-  border-radius: 12px 12px 0 0;
-  padding: 16px;
-  padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  background: rgba(44, 44, 46, 0.95);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: 14px;
+  padding: 0;
+  margin-bottom: 8px;
   max-height: 60vh;
   overflow-y: auto;
+  overflow: hidden;
 }
 
 .sheet-handle {
-  width: 36px;
-  height: 4px;
-  border-radius: 2px;
-  background: #555;
-  margin: 0 auto 16px;
+  display: none;
 }
 
 .sheet-content h3 {
-  font-size: 16px;
-  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 14px 16px 4px;
 }
 
 .sheet-content input {
-  width: 100%;
+  width: calc(100% - 32px);
+  margin: 8px 16px;
   padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
+  border-radius: 10px;
+  border: none;
+  background: rgba(120, 120, 128, 0.24);
   color: var(--text-primary);
-  font-size: 15px;
-  margin-bottom: 10px;
+  font-size: 16px;
   outline: none;
 }
 
 .sheet-content input:focus {
-  border-color: var(--accent);
+  background: rgba(120, 120, 128, 0.36);
 }
 
 .sheet-option {
-  padding: 12px;
-  border-radius: 6px;
+  padding: 16px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 17px;
+  text-align: center;
+  color: #0a84ff;
+  border-top: 0.5px solid rgba(84, 84, 88, 0.65);
+}
+
+.sheet-option:first-of-type {
+  border-top: none;
 }
 
 .sheet-option:active {
-  background: var(--bg-panel);
+  background: rgba(120, 120, 128, 0.24);
 }
 
 .sheet-content button.sheet-action {
-  width: 100%;
-  padding: 12px;
+  width: calc(100% - 32px);
+  margin: 8px 16px 16px;
+  padding: 14px;
   border: none;
-  border-radius: 6px;
-  background: var(--accent);
+  border-radius: 10px;
+  background: #0a84ff;
   color: #fff;
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 600;
   cursor: pointer;
-  margin-top: 8px;
+}
+
+.sheet-cancel {
+  position: relative;
+  background: rgba(44, 44, 46, 0.95);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-radius: 14px;
+  padding: 16px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  color: #0a84ff;
+  cursor: pointer;
+}
+
+.sheet-cancel:active {
+  background: rgba(60, 60, 62, 0.95);
 }
 
 .section-loading {
