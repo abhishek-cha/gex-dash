@@ -279,11 +279,18 @@ html, body {
 #chart-price-wrap {
   flex: 1;
   position: relative;
+  overflow: hidden;
+  min-width: 0;
   background: #000;
   border-radius: 4px 0 0 4px;
 }
 
 #chart-price-wrap canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
   touch-action: none;
 }
 
@@ -293,6 +300,7 @@ html, body {
   overflow: hidden;
   background: #000;
   border-left: 1px solid var(--border);
+  min-width: 0;
 }
 
 #chart-gex-wrap.visible {
@@ -301,7 +309,11 @@ html, body {
 }
 
 #chart-gex-wrap canvas {
-  display: block;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
   touch-action: none;
 }
 
