@@ -91,7 +91,6 @@ html, body {
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--bg-app);
-  padding-bottom: env(safe-area-inset-bottom);
   z-index: 50;
 }
 
