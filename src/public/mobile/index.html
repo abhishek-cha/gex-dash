@@ -49,9 +49,24 @@
       </div>
     </div>
     <div id="chart-toolbar">
-      <div class="picker-wheel" id="picker-symbol"></div>
-      <div class="picker-wheel" id="picker-freq"></div>
-      <div class="picker-wheel" id="picker-range"></div>
+      <select id="picker-symbol"></select>
+      <select id="picker-freq">
+        <option value="5m">5m</option>
+        <option value="15m">15m</option>
+        <option value="30m">30m</option>
+        <option value="1D" selected>1D</option>
+        <option value="1W">1W</option>
+        <option value="1M">1M</option>
+      </select>
+      <select id="picker-range">
+        <option value="5D">5D</option>
+        <option value="1M">1M</option>
+        <option value="3M">3M</option>
+        <option value="6M">6M</option>
+        <option value="1Y" selected>1Y</option>
+        <option value="2Y">2Y</option>
+        <option value="5Y">5Y</option>
+      </select>
       <button id="exp-btn">Exp</button>
     </div>
   </div>

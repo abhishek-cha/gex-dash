@@ -360,38 +360,20 @@ html, body {
 #chart-toolbar {
   display: flex;
   align-items: center;
-  padding: 4px 12px;
+  padding: 6px 12px;
   border-top: 1px solid var(--border);
-  gap: 16px;
-  height: 44px;
+  gap: 8px;
 }
 
-.picker-wheel {
-  height: 36px;
-  overflow: hidden;
-  position: relative;
-  cursor: pointer;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #fff 30%, #fff 70%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #fff 30%, #fff 70%, transparent 100%);
-}
-
-.picker-wheel .picker-track {
-  transition: transform 0.2s ease;
-}
-
-.picker-wheel .picker-item {
-  height: 18px;
-  line-height: 18px;
-  font-size: 13px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  text-align: center;
-  padding: 0 4px;
-}
-
-.picker-wheel .picker-item.active {
+#chart-toolbar select {
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
   color: var(--text-primary);
+  font-size: 13px;
   font-weight: 600;
+  outline: none;
 }
 
 #exp-btn {
