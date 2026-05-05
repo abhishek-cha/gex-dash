@@ -14,8 +14,6 @@ const state = {
   activeRange: '1M',
   allExpirations: [],
   selectedExpirations: new Set(),
-  gexPanelOpen: false,
-  gexMode: 'gex',
 
   closeStream() {
     if (this.activeStream) {
@@ -27,8 +25,6 @@ const state = {
 
 let viewport = null;
 let priceChart = null;
-let gexSection = null;
-let volumeSection = null;
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
@@ -46,65 +42,38 @@ function initChart() {
   priceChart.scene.background = new THREE.Color(0x000000);
 }
 
-function initGexPanel() {
-  if (gexSection) return;
-  const gexContainer = document.getElementById('gex-chart-container');
+let activePanel = null;
 
-  const gexInner = document.createElement('div');
-  gexInner.id = 'gex-inner';
-  gexInner.style.cssText = 'position:absolute;inset:0;';
-  gexContainer.appendChild(gexInner);
-
-  const volInner = document.createElement('div');
-  volInner.id = 'vol-inner';
-  volInner.style.cssText = 'position:absolute;inset:0;display:none;';
-  gexContainer.appendChild(volInner);
-
-  const black = new THREE.Color(0x000000);
-  gexSection = new GEXSection(gexInner, viewport);
-  volumeSection = new VolumeSection(volInner, viewport);
-  gexSection.scene.background = black;
-  volumeSection.scene.background = black;
-}
-
-function updateGexMode() {
-  const gexInner = document.getElementById('gex-inner');
-  const volInner = document.getElementById('vol-inner');
-  if (!gexInner || !volInner) return;
-
-  if (state.gexMode === 'gex') {
-    gexInner.style.display = '';
-    volInner.style.display = 'none';
-  } else {
-    gexInner.style.display = 'none';
-    volInner.style.display = '';
-  }
-}
-
-function toggleGexPanel() {
-  state.gexPanelOpen = !state.gexPanelOpen;
+function setView(mode) {
   const gexWrap = document.getElementById('chart-gex-wrap');
-  const arrow = document.getElementById('gex-toggle-arrow');
+  const expGroup = document.getElementById('exp-group');
 
-  if (state.gexPanelOpen) {
-    gexWrap.classList.remove('collapsed');
-    gexWrap.classList.add('expanded');
-    arrow.classList.remove('collapsed');
-    arrow.classList.add('expanded');
-    arrow.textContent = '›';
-    // Init GEX sections after panel finishes expanding
-    gexWrap.addEventListener('transitionend', () => {
-      initGexPanel();
-      updateGexMode();
-    }, { once: true });
-  } else {
-    gexWrap.classList.remove('expanded');
-    gexWrap.classList.add('collapsed');
-    arrow.classList.remove('expanded');
-    arrow.classList.add('collapsed');
-    arrow.textContent = '‹';
+  // Dispose existing panel
+  if (activePanel) {
+    activePanel.dispose();
+    activePanel = null;
+    gexWrap.innerHTML = '';
   }
+
+  if (mode === 'chart') {
+    gexWrap.classList.remove('visible');
+    expGroup.classList.add('hidden');
+    return;
+  }
+
+  gexWrap.classList.add('visible');
+  expGroup.classList.remove('hidden');
+  const black = new THREE.Color(0x000000);
+
+  if (mode === 'gex') {
+    activePanel = new GEXSection(gexWrap, viewport);
+  } else {
+    activePanel = new VolumeSection(gexWrap, viewport);
+  }
+  activePanel.scene.background = black;
+  bus.emit('viewport:change');
 }
+
 
 function loadSymbol(symbol) {
   state.currentSymbol = symbol;
@@ -160,6 +129,7 @@ function setupBus() {
 
   bus.on('data:expirations', (expirationDates) => {
     state.allExpirations = expirationDates;
+    populateExpSelect();
   });
 }
 
@@ -415,6 +385,47 @@ function populateSymbolScroller() {
   ).join('');
 }
 
+function populateExpSelect() {
+  const sel = document.getElementById('picker-exp');
+  sel.innerHTML = state.allExpirations.map((d) =>
+    `<option value="${d}" ${state.selectedExpirations.has(d) ? 'selected' : ''}>${d}</option>`
+  ).join('');
+}
+
+function setupExpSelect() {
+  const sel = document.getElementById('picker-exp');
+  sel.addEventListener('change', () => {
+    state.selectedExpirations = new Set(
+      [...sel.selectedOptions].map((o) => o.value)
+    );
+    reloadGexFiltered();
+  });
+
+  document.getElementById('exp-all').addEventListener('click', () => {
+    [...sel.options].forEach((o) => o.selected = true);
+    state.selectedExpirations = new Set(state.allExpirations);
+    reloadGexFiltered();
+  });
+
+  document.getElementById('exp-clear').addEventListener('click', () => {
+    [...sel.options].forEach((o) => o.selected = false);
+    state.selectedExpirations = new Set();
+    reloadGexFiltered();
+  });
+}
+
+function reloadGexFiltered() {
+  if (!state.currentSymbol || !viewport) return;
+  state.closeStream();
+  const priceParams = getPriceParams(state.activeFreq, state.activeRange);
+  state.activeStream = openStream(state.currentSymbol, {
+    types: ['gex', 'quote'],
+    viewport,
+    priceParams,
+    expirations: state.selectedExpirations,
+  });
+}
+
 async function init() {
   const authed = await checkAuth();
   if (!authed) {
@@ -425,20 +436,14 @@ async function init() {
   document.getElementById('app').classList.add('active');
   setupBus();
   setupToolbar();
+  setupExpSelect();
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
   });
 
-  document.getElementById('gex-toggle-arrow').addEventListener('click', toggleGexPanel);
-
-  document.querySelectorAll('#gex-mode-toggle button').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('#gex-mode-toggle button').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      state.gexMode = btn.dataset.mode;
-      updateGexMode();
-    });
+  document.getElementById('picker-view').addEventListener('change', (e) => {
+    setView(e.target.value);
   });
 
   document.getElementById('wl-add-btn').addEventListener('click', showAddPicker);

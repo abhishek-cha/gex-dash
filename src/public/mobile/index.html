@@ -39,14 +39,7 @@
     </div>
     <div id="chart-area">
       <div id="chart-price-wrap"></div>
-      <div id="gex-toggle-arrow" class="collapsed">‹</div>
-      <div id="chart-gex-wrap" class="collapsed">
-        <div id="gex-mode-toggle">
-          <button class="active" data-mode="gex">GEX</button>
-          <button data-mode="vol">VOL</button>
-        </div>
-        <div id="gex-chart-container"></div>
-      </div>
+      <div id="chart-gex-wrap"></div>
     </div>
     <div id="chart-toolbar">
       <select id="picker-symbol"></select>
@@ -67,7 +60,16 @@
         <option value="2Y">2Y</option>
         <option value="5Y">5Y</option>
       </select>
-      <button id="exp-btn">Exp</button>
+      <select id="picker-view">
+        <option value="chart">Chart Only</option>
+        <option value="gex">Chart + GEX</option>
+        <option value="vol">Chart + Volume</option>
+      </select>
+      <div id="exp-group" class="hidden">
+        <select id="picker-exp" multiple></select>
+        <button id="exp-all">All</button>
+        <button id="exp-clear">Clear</button>
+      </div>
     </div>
   </div>
 

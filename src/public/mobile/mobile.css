@@ -285,75 +285,20 @@ html, body {
   touch-action: none;
 }
 
-#gex-toggle-arrow {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  background: var(--bg-card);
-  border-radius: 4px 0 0 4px;
-  padding: 12px 4px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 12px;
-  z-index: 10;
-  border: 1px solid #2a2e39;
-  border-right: none;
-  transition: right 0.2s;
-}
-
-#gex-toggle-arrow.expanded {
-  right: 30%;
-}
-
 #chart-gex-wrap {
+  display: none;
   position: relative;
   background: #000;
   border-radius: 0 4px 4px 0;
   border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  width: 0;
-  overflow: hidden;
-  transition: width 0.2s;
-}
-
-#chart-gex-wrap.expanded {
   width: 30%;
 }
 
-#gex-mode-toggle {
-  display: flex;
-  margin: 6px;
-  background: var(--bg-app);
-  border-radius: 4px;
-  padding: 2px;
+#chart-gex-wrap.visible {
+  display: block;
 }
 
-#gex-mode-toggle button {
-  flex: 1;
-  text-align: center;
-  padding: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  border: none;
-  border-radius: 3px;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-#gex-mode-toggle button.active {
-  background: var(--accent);
-  color: #fff;
-}
-
-#gex-chart-container {
-  flex: 1;
-  position: relative;
-}
-
-#gex-chart-container canvas {
+#chart-gex-wrap canvas {
   touch-action: none;
 }
 
@@ -376,16 +321,38 @@ html, body {
   outline: none;
 }
 
-#exp-btn {
+#exp-group {
   margin-left: auto;
-  padding: 4px 9px;
-  font-size: 11px;
-  border: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-panel);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+#exp-group.hidden {
+  display: none;
+}
+
+#picker-exp {
+  padding: 4px 6px;
   border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+}
+
+#exp-all, #exp-clear {
+  border: none;
   background: none;
-  color: var(--text-secondary);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  flex-shrink: 0;
+  padding: 2px 4px;
 }
 
 /* Add picker */
