@@ -7,6 +7,7 @@ import {
 
 const SCHWAB_API_BASE = "https://api.schwabapi.com/marketdata/v1";
 const REFRESH_BUFFER_MS = 5 * 60 * 1000; // refresh 5 min before expiry
+const REFRESH_TOKEN_KEEP_ALIVE_MS = 6 * 24 * 60 * 60 * 1000; // rotate refresh token every 6 days
 
 // --- Token persistence ---
 
@@ -33,7 +34,7 @@ export function initSchwabAuth(
   projectRoot: string
 ): EnhancedTokenManager {
   const tokenFile = path.join(projectRoot, ".tokens.json");
-  return createSchwabAuth({
+  const auth = createSchwabAuth({
     oauthConfig: {
       clientId: process.env.SCHWAB_CLIENT_ID!,
       clientSecret: process.env.SCHWAB_CLIENT_SECRET!,
@@ -53,6 +54,21 @@ export function initSchwabAuth(
       },
     },
   });
+
+  // Refresh immediately on startup (resets the 7-day refresh token clock),
+  // then repeat every 6 days to keep it alive indefinitely.
+  const rotateRefreshToken = async () => {
+    try {
+      await auth.refreshIfNeeded({ force: true });
+      console.log("Refresh token rotated (keep-alive)");
+    } catch (e) {
+      console.error("Refresh token keep-alive failed:", (e as Error).message);
+    }
+  };
+  setTimeout(rotateRefreshToken, 5000); // shortly after startup (let tokens load)
+  setInterval(rotateRefreshToken, REFRESH_TOKEN_KEEP_ALIVE_MS);
+
+  return auth;
 }
 
 /**
