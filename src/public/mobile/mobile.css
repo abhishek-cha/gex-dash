@@ -290,16 +290,18 @@ html, body {
 #chart-gex-wrap {
   display: none;
   position: relative;
+  overflow: hidden;
   background: #000;
   border-left: 1px solid var(--border);
 }
 
 #chart-gex-wrap.visible {
-  display: flex;
+  display: block;
   flex: 0 0 30%;
 }
 
 #chart-gex-wrap canvas {
+  display: block;
   touch-action: none;
 }
 

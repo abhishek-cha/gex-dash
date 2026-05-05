@@ -48,7 +48,6 @@ function setView(mode) {
   const gexWrap = document.getElementById('chart-gex-wrap');
   const expGroup = document.getElementById('exp-group');
 
-  // Dispose existing panel
   if (activePanel) {
     activePanel.dispose();
     activePanel = null;
@@ -61,10 +60,14 @@ function setView(mode) {
     return;
   }
 
+  if (!viewport) {
+    initChart();
+  }
+
   gexWrap.classList.add('visible');
   expGroup.classList.remove('hidden');
-  const black = new THREE.Color(0x000000);
 
+  const black = new THREE.Color(0x000000);
   if (mode === 'gex') {
     activePanel = new GEXSection(gexWrap, viewport);
   } else {
