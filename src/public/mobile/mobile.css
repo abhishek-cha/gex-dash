@@ -130,6 +130,7 @@ html, body {
 }
 
 .tab-header select {
+  margin-left: auto;
   background: none;
   border: none;
   color: #fff;
