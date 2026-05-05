@@ -16,6 +16,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 - **Watchlist sidebar** — Persistent, resizable sidebar with live quotes, drag-to-reorder, named sections, and context menu actions
 - **Resizable sections** — Drag handles between Price, GEX, and Volume sections to resize them horizontally
 - **Interactive chart** — Pan, zoom, crosshair tooltips, and axis-anchored scaling (see interactions below)
+- **Mobile PWA** — Bookmarkable mobile-friendly view at `/mobile` with TradingView-inspired dark theme, bottom tab navigation, touch gestures (pinch zoom, long-press crosshair), and collapsible GEX panel
 
 ## Prerequisites
 
@@ -56,17 +57,27 @@ npm run build    # compile TypeScript
 npm start        # run compiled output
 ```
 
+### Mobile
+
+Access the mobile view at `https://<HOST>:<PORT>/mobile/`. Add to home screen for a full-screen PWA experience.
+
+- **Watchlist tab** — Two-line rows (ticker + price / company name + change%). Long-press to enter edit mode (delete symbols/sections). Tap a row to load its chart.
+- **Chart tab** — Full-width candlestick chart with collapsible GEX/Volume panel (tap arrow on right edge). Touch gestures: one-finger pan, pinch to zoom, long-press for crosshair, double-tap to reset.
+- **Bottom toolbar** — Vertical scroll wheels to cycle through watchlist symbols, candle intervals (5m–1M), and date ranges (5D–5Y).
+- **Add** — Tap + to add symbols or create new sections via iOS-style action sheet.
+
 ## Chart Interactions
 
 | Area | Action | Behavior |
 |------|--------|----------|
-| Candle chart | Click + drag | Pan horizontally through time (Y auto-fits) |
-| Candle chart | Double-click | Reset to full data range |
+| Candle chart | Click + drag (or one-finger touch) | Pan horizontally through time (Y auto-fits) |
+| Candle chart | Double-click (or double-tap) | Reset to full data range |
 | Price axis | Click + drag up/down | Zoom price scale around click point |
 | Price axis | Double-click | Reset to auto-fit Y |
 | X-axis (date labels) | Click + drag left/right | Zoom time scale around click point |
 | Section borders | Drag left/right | Resize adjacent sections horizontally (min-widths enforced) |
-| Any section | Crosshair hover | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, OI, and cumulative GEX; hovered bars glow |
+| Any section | Crosshair hover (or long-press on touch) | Horizontal crosshair syncs across all sections (Price, GEX, Volume); GEX tooltip shows nearest strike's call/put/net GEX, volume, OI, and cumulative GEX; hovered bars glow |
+| Candle chart | Pinch (touch) | Zoom time scale around pinch midpoint |
 
 All axis zooms anchor to the position where you clicked, so the point under your cursor stays fixed while the scale expands or contracts around it.
 
