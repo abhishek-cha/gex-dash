@@ -291,13 +291,12 @@ html, body {
   display: none;
   position: relative;
   background: #000;
-  border-radius: 0 4px 4px 0;
   border-left: 1px solid var(--border);
-  width: 30%;
 }
 
 #chart-gex-wrap.visible {
-  display: block;
+  display: flex;
+  flex: 0 0 30%;
 }
 
 #chart-gex-wrap canvas {
