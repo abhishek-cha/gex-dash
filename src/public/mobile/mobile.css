@@ -17,6 +17,9 @@
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 html, body {
@@ -438,6 +441,8 @@ html, body {
   color: var(--text-primary);
   font-size: 16px;
   outline: none;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .sheet-content input:focus {
