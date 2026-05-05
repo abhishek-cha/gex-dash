@@ -5,7 +5,7 @@ import { ViewportModel } from '/js/chart/ViewportModel.js';
 import { PriceChart } from '/js/chart/PriceChart.js';
 import { GEXSection } from '/js/chart/GEXSection.js';
 import { VolumeSection } from '/js/chart/VolumeSection.js';
-import { setupWatchlistTouch } from '/mobile/touch.js';
+import { setupWatchlistTouch, shouldSuppressClick } from '/mobile/touch.js';
 
 const state = {
   currentSymbol: null,
@@ -195,7 +195,10 @@ function createWatchlistRow(symbol) {
     </div>
   `;
 
-  row.addEventListener('click', () => loadSymbol(symbol));
+  row.addEventListener('click', () => {
+    if (shouldSuppressClick()) return;
+    loadSymbol(symbol);
+  });
   return row;
 }
 
@@ -252,25 +255,59 @@ function closeWatchlistStreams() {
 
 function handleAdd(value) {
   if (value === 'symbol') {
-    const sym = prompt('Ticker symbol:');
-    if (!sym || !sym.trim()) return;
-    const ticker = sym.trim().toUpperCase();
-    const section = watchlistData[0]?.name || 'Watchlist';
-    if (!watchlistData.length) {
-      watchlistData.push({ name: section, symbols: [] });
-    }
-    fetch(`/api/watchlist/${encodeURIComponent(section)}/${encodeURIComponent(ticker)}`, { method: 'POST' })
-      .then(() => loadWatchlist());
+    showDialog('Ticker symbol', async (text) => {
+      const ticker = text.trim().toUpperCase();
+      if (!ticker) return;
+      if (!watchlistData.length) {
+        watchlistData.push({ name: 'Watchlist', symbols: [] });
+      }
+      const section = watchlistData[watchlistData.length - 1].name;
+      await fetch(`/api/watchlist/${encodeURIComponent(section)}/${encodeURIComponent(ticker)}`, { method: 'POST' });
+      await loadWatchlist();
+    });
   } else if (value === 'section') {
-    const name = prompt('Section name:');
-    if (!name || !name.trim()) return;
-    watchlistData.push({ name: name.trim(), symbols: [] });
-    fetch('/api/watchlist', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(watchlistData),
-    }).then(() => loadWatchlist());
+    showDialog('Section name', async (text) => {
+      const name = text.trim();
+      if (!name) return;
+      watchlistData.push({ name, symbols: [] });
+      await fetch('/api/watchlist', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(watchlistData),
+      });
+      await loadWatchlist();
+    });
   }
+}
+
+function showDialog(placeholder, onSubmit) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'wl-dialog';
+  dialog.innerHTML = `
+    <form method="dialog">
+      <input type="text" placeholder="${placeholder}" autocapitalize="characters" />
+      <div class="wl-dialog-actions">
+        <button type="button" class="wl-dialog-cancel">Cancel</button>
+        <button type="submit" class="wl-dialog-ok">OK</button>
+      </div>
+    </form>
+  `;
+  document.body.appendChild(dialog);
+  dialog.showModal();
+
+  const input = dialog.querySelector('input');
+  input.focus();
+
+  dialog.querySelector('.wl-dialog-cancel').addEventListener('click', () => {
+    dialog.close();
+    dialog.remove();
+  });
+
+  dialog.addEventListener('close', () => {
+    const val = input.value;
+    dialog.remove();
+    if (val) onSubmit(val);
+  });
 }
 
 function reloadPrice() {
@@ -386,12 +423,20 @@ async function init() {
 
   setupWatchlistTouch(document.getElementById('wl-sections'), {
     onReorder: async (newOrder) => {
-      const flat = watchlistData.flatMap((s) => s.symbols);
-      if (flat.join(',') !== newOrder.join(',')) {
-        watchlistData[0].symbols = newOrder.filter((s) => watchlistData.some((sec) => sec.symbols.includes(s)));
-        for (let i = 1; i < watchlistData.length; i++) {
-          watchlistData[i].symbols = watchlistData[i].symbols.filter((s) => !watchlistData[0].symbols.includes(s));
+      // Rebuild watchlistData from DOM order respecting section headers
+      const container = document.getElementById('wl-sections');
+      const newData = [];
+      let currentSection = null;
+      for (const el of container.children) {
+        if (el.classList.contains('wl-section-header')) {
+          currentSection = { name: el.textContent, symbols: [] };
+          newData.push(currentSection);
+        } else if (el.classList.contains('wl-row') && currentSection) {
+          currentSection.symbols.push(el.dataset.symbol);
         }
+      }
+      if (newData.length) {
+        watchlistData = newData;
         await fetch('/api/watchlist', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },

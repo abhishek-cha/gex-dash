@@ -1,6 +1,15 @@
 const LONG_PRESS_MS = 500;
 const SWIPE_THRESHOLD = 60;
 
+let _suppressClick = false;
+export function shouldSuppressClick() {
+  if (_suppressClick) {
+    _suppressClick = false;
+    return true;
+  }
+  return false;
+}
+
 export function setupWatchlistTouch(container, { onReorder, onDelete }) {
   let pressTimer = null;
   let startY = 0;
@@ -202,5 +211,6 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
 
     dragRow = null;
     placeholder = null;
+    _suppressClick = true;
   }
 }
