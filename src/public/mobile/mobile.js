@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { checkAuth, openStream, getPriceParams } from '/js/api.js';
 import { bus } from '/js/chart/EventBus.js';
 import { ViewportModel } from '/js/chart/ViewportModel.js';
@@ -56,6 +57,12 @@ function initChart() {
   priceChart = new PriceChart(priceWrap, viewport);
   gexSection = new GEXSection(gexInner, viewport);
   volumeSection = new VolumeSection(volInner, viewport);
+
+  // Override chart backgrounds to pure black for mobile
+  const black = new THREE.Color(0x000000);
+  priceChart.scene.background = black;
+  gexSection.scene.background = black;
+  volumeSection.scene.background = black;
 }
 
 function updateGexMode() {
@@ -100,7 +107,7 @@ function loadSymbol(symbol) {
   state.allExpirations = [];
   state.selectedExpirations = new Set();
 
-  document.getElementById('chart-symbol').textContent = symbol;
+  document.getElementById('chart-name').textContent = symbol;
   document.getElementById('toolbar-symbol').textContent = symbol;
   document.getElementById('chart-price').textContent = '--';
   document.getElementById('chart-change').textContent = '--';
@@ -127,6 +134,9 @@ function setupBus() {
     const change = quote.change || 0;
     const pct = quote.percentChange || 0;
 
+    if (quote.description) {
+      document.getElementById('chart-name').textContent = quote.description;
+    }
     document.getElementById('chart-price').textContent = price.toFixed(2);
     const sign = change >= 0 ? '+' : '';
     document.getElementById('chart-change').textContent = `${sign}${pct.toFixed(2)}%`;

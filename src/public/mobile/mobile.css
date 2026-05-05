@@ -223,9 +223,10 @@ html, body {
   gap: 8px;
 }
 
-#chart-symbol {
-  font-size: 17px;
-  font-weight: 700;
+#chart-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 #chart-price {
@@ -250,7 +251,7 @@ html, body {
 #chart-price-wrap {
   flex: 1;
   position: relative;
-  background: var(--bg-panel);
+  background: #000;
   border-radius: 4px 0 0 4px;
 }
 
@@ -281,7 +282,7 @@ html, body {
 
 #chart-gex-wrap {
   position: relative;
-  background: var(--bg-panel);
+  background: #000;
   border-radius: 0 4px 4px 0;
   border-left: 1px solid var(--border);
   display: flex;

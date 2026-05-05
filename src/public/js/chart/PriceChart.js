@@ -272,7 +272,8 @@ export class PriceChart extends BaseSection {
       lbl.className = 'date-label';
       lbl.style.left = x + 'px';
       const d = c.date;
-      lbl.textContent = `${d.getMonth() + 1}/${d.getDate()}`;
+      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      lbl.textContent = `${months[d.getMonth()]} ${d.getDate()}`;
       frag.appendChild(lbl);
     }
 
