@@ -172,7 +172,10 @@ export async function fetchQuote(
     throw new Error(`Schwab quotes API returned ${resp.status}`);
   }
   const data = await resp.json();
-  return data[symbol]?.quote || data[symbol] || {};
+  const entry = data[symbol] || {};
+  const quote = entry.quote || entry;
+  quote.description = entry.reference?.description || entry.description || '';
+  return quote;
 }
 
 export async function fetchExpirations(
