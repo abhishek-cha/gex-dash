@@ -285,102 +285,81 @@ function closeWatchlistStreams() {
   }
 }
 
-function showBottomSheet(content) {
-  const sheet = document.getElementById('bottom-sheet');
-  const body = document.getElementById('sheet-body');
-  body.innerHTML = content;
-  sheet.classList.remove('hidden');
-  setupSheetSwipeDismiss();
-}
-
-function hideBottomSheet() {
-  const sheet = document.getElementById('bottom-sheet');
-  const sheetContent = sheet.querySelector('.sheet-content');
-  sheetContent.style.transform = '';
-  sheet.classList.add('hidden');
-}
-
-function setupSheetSwipeDismiss() {
-  const sheet = document.getElementById('bottom-sheet');
-  const content = sheet.querySelector('.sheet-content');
-  let startY = 0;
-  let currentY = 0;
-
-  content.addEventListener('touchstart', (e) => {
-    startY = e.touches[0].clientY;
-    content.style.transition = 'none';
-  }, { passive: true });
-
-  content.addEventListener('touchmove', (e) => {
-    currentY = e.touches[0].clientY;
-    const dy = currentY - startY;
-    if (dy > 0) {
-      content.style.transform = `translateY(${dy}px)`;
+function showAddPicker() {
+  removeAddRow();
+  const select = document.createElement('select');
+  select.id = 'wl-add-picker';
+  select.className = 'wl-add-picker';
+  select.innerHTML = `
+    <option value="" disabled selected>Add...</option>
+    <option value="symbol">Add Symbol</option>
+    <option value="section">New Section</option>
+  `;
+  select.addEventListener('change', () => {
+    if (select.value === 'symbol') {
+      select.remove();
+      showAddSymbolRow();
+    } else if (select.value === 'section') {
+      select.remove();
+      showAddSectionRow();
     }
-  }, { passive: true });
-
-  content.addEventListener('touchend', () => {
-    content.style.transition = 'transform 0.2s ease';
-    const dy = currentY - startY;
-    if (dy > 80) {
-      content.style.transform = `translateY(100%)`;
-      setTimeout(hideBottomSheet, 200);
-    } else {
-      content.style.transform = '';
-    }
-    startY = 0;
-    currentY = 0;
   });
+
+  const container = document.getElementById('wl-sections');
+  container.parentNode.insertBefore(select, container);
+  select.focus();
+  select.click();
 }
 
-function showAddMenu() {
-  showBottomSheet(`
-    <div class="sheet-option" id="sheet-add-symbol">Add Symbol</div>
-    <div class="sheet-option" id="sheet-add-section">New Section</div>
-  `);
-  document.getElementById('sheet-add-symbol').addEventListener('click', showAddSymbolForm);
-  document.getElementById('sheet-add-section').addEventListener('click', showAddSectionForm);
-}
+function showAddSymbolRow() {
+  removeAddRow();
+  const container = document.getElementById('wl-sections');
+  const row = document.createElement('div');
+  row.className = 'wl-row wl-add-inline';
+  row.innerHTML = `
+    <input type="text" class="wl-inline-input" placeholder="Ticker" autocapitalize="characters" />
+    <button class="wl-inline-add-btn">+</button>
+  `;
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
 
-function showAddSymbolForm() {
-  const sectionOptions = watchlistData.map((s, i) =>
-    `<div class="sheet-option" data-idx="${i}">${s.name}</div>`
-  ).join('');
-
-  showBottomSheet(`
-    <h3>Add Symbol</h3>
-    <input type="text" id="sheet-symbol-input" placeholder="Ticker (e.g. AAPL)" autocapitalize="characters" />
-    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;">Add to section:</p>
-    ${sectionOptions}
-  `);
-
-  const input = document.getElementById('sheet-symbol-input');
+  const input = row.querySelector('input');
+  const btn = row.querySelector('button');
   input.focus();
 
-  document.querySelectorAll('#sheet-body .sheet-option').forEach((opt) => {
-    opt.addEventListener('click', async () => {
-      const sym = input.value.trim().toUpperCase();
-      if (!sym) return;
-      const idx = parseInt(opt.dataset.idx);
-      const section = watchlistData[idx];
-      await fetch(`/api/watchlist/${encodeURIComponent(section.name)}/${encodeURIComponent(sym)}`, { method: 'POST' });
-      hideBottomSheet();
-      await loadWatchlist();
-    });
-  });
+  const doAdd = async () => {
+    const sym = input.value.trim().toUpperCase();
+    if (!sym) return;
+    const section = watchlistData[0]?.name || 'Watchlist';
+    if (!watchlistData.length) {
+      watchlistData.push({ name: section, symbols: [] });
+    }
+    await fetch(`/api/watchlist/${encodeURIComponent(section)}/${encodeURIComponent(sym)}`, { method: 'POST' });
+    removeAddRow();
+    await loadWatchlist();
+  };
+
+  btn.addEventListener('click', doAdd);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
 }
 
-function showAddSectionForm() {
-  showBottomSheet(`
-    <h3>New Section</h3>
-    <input type="text" id="sheet-section-input" placeholder="Section name" />
-    <button class="sheet-action" id="sheet-create-section">Create</button>
-  `);
+function showAddSectionRow() {
+  removeAddRow();
+  const container = document.getElementById('wl-sections');
+  const row = document.createElement('div');
+  row.className = 'wl-section-header wl-add-inline';
+  row.innerHTML = `
+    <input type="text" class="wl-inline-input" placeholder="Section name" />
+    <button class="wl-inline-add-btn">+</button>
+  `;
+  container.appendChild(row);
+  container.scrollTop = container.scrollHeight;
 
-  const input = document.getElementById('sheet-section-input');
+  const input = row.querySelector('input');
+  const btn = row.querySelector('button');
   input.focus();
 
-  document.getElementById('sheet-create-section').addEventListener('click', async () => {
+  const doAdd = async () => {
     const name = input.value.trim();
     if (!name) return;
     watchlistData.push({ name, symbols: [] });
@@ -389,9 +368,17 @@ function showAddSectionForm() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(watchlistData),
     });
-    hideBottomSheet();
-    renderWatchlist();
-  });
+    removeAddRow();
+    await loadWatchlist();
+  };
+
+  btn.addEventListener('click', doAdd);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAdd(); });
+}
+
+function removeAddRow() {
+  document.getElementById('wl-add-picker')?.remove();
+  document.querySelectorAll('.wl-add-inline').forEach((el) => el.remove());
 }
 
 function reloadPrice() {
@@ -529,9 +516,7 @@ async function init() {
     });
   });
 
-  document.getElementById('wl-add-btn').addEventListener('click', showAddMenu);
-  document.querySelector('.sheet-backdrop')?.addEventListener('click', hideBottomSheet);
-  document.getElementById('sheet-cancel')?.addEventListener('click', hideBottomSheet);
+  document.getElementById('wl-add-btn').addEventListener('click', showAddPicker);
 
   await loadWatchlist();
 
