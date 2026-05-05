@@ -24,6 +24,7 @@
 
 html, body {
   height: 100%;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-app);
   color: var(--text-primary);

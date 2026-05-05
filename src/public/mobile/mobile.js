@@ -402,7 +402,7 @@ function reloadGexFiltered() {
 
 async function init() {
   // Lock viewport height to prevent keyboard resize
-  const h = document.documentElement.clientHeight + 'px';
+  const h = window.innerHeight + 'px';
   document.documentElement.style.height = h;
   document.body.style.height = h;
 
