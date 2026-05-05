@@ -401,6 +401,11 @@ function reloadGexFiltered() {
 }
 
 async function init() {
+  // Lock viewport height to prevent keyboard resize
+  const h = document.documentElement.clientHeight + 'px';
+  document.documentElement.style.height = h;
+  document.body.style.height = h;
+
   const authed = await checkAuth();
   if (!authed) {
     document.getElementById('login-screen').style.display = 'flex';
