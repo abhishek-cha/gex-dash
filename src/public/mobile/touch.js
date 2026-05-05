@@ -1,68 +1,126 @@
 const LONG_PRESS_MS = 500;
+const SWIPE_THRESHOLD = 60;
 
-let editMode = false;
-let onDeleteCb = null;
-let onReorderCb = null;
-let containerEl = null;
-
-export function setupWatchlistReorder(container, { onReorder, onDelete }) {
-  containerEl = container;
-  onReorderCb = onReorder;
-  onDeleteCb = onDelete;
-
+export function setupWatchlistTouch(container, { onReorder, onDelete }) {
   let pressTimer = null;
   let startY = 0;
   let dragRow = null;
   let placeholder = null;
+  let activeSwipeRow = null;
 
-  container.addEventListener('pointerdown', (e) => {
-    const deleteBtn = e.target.closest('.wl-delete-btn');
-    if (deleteBtn) return;
+  // --- Swipe to delete ---
+  container.addEventListener('touchstart', (e) => {
+    const row = e.target.closest('.wl-row');
+    if (!row || row === dragRow) return;
+    row._swipeStartX = e.touches[0].clientX;
+    row._swiping = false;
+  }, { passive: true });
 
-    const row = e.target.closest('.wl-row, .wl-section-header');
-    if (!row) return;
+  container.addEventListener('touchmove', (e) => {
+    const row = e.target.closest('.wl-row');
+    if (!row || !('_swipeStartX' in row)) return;
 
-    if (editMode && row.classList.contains('wl-row')) {
-      startY = e.clientY;
-      pressTimer = setTimeout(() => startDrag(row, e), 200);
+    const dx = e.touches[0].clientX - row._swipeStartX;
+    if (dx < -10) row._swiping = true;
+    if (!row._swiping) return;
 
-      const onMoveCancel = (ev) => {
-        if (Math.abs(ev.clientY - startY) > 10) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-        }
-      };
-      container.addEventListener('pointermove', onMoveCancel, { once: false });
-      container.addEventListener('pointerup', () => {
-        clearTimeout(pressTimer);
-        container.removeEventListener('pointermove', onMoveCancel);
-      }, { once: true });
+    const offset = Math.min(0, Math.max(-56, dx));
+    row.style.transform = `translateX(${offset}px)`;
+    row.style.transition = 'none';
+
+    // Show/create delete behind
+    ensureDeleteBehind(row);
+  }, { passive: true });
+
+  container.addEventListener('touchend', (e) => {
+    const row = e.target.closest('.wl-row');
+    if (!row || !('_swipeStartX' in row)) return;
+
+    if (!row._swiping) {
+      delete row._swipeStartX;
       return;
     }
 
-    if (!editMode) {
-      startY = e.clientY;
-      pressTimer = setTimeout(() => {
-        enterEditMode();
-      }, LONG_PRESS_MS);
+    const dx = e.changedTouches[0].clientX - row._swipeStartX;
+    row.style.transition = 'transform 0.2s ease';
 
-      const onMoveCancel = (ev) => {
-        if (Math.abs(ev.clientY - startY) > 10) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-          container.removeEventListener('pointermove', onMoveCancel);
-        }
-      };
-      container.addEventListener('pointermove', onMoveCancel, { once: false });
+    if (dx < -SWIPE_THRESHOLD) {
+      row.style.transform = 'translateX(-48px)';
+      if (activeSwipeRow && activeSwipeRow !== row) closeSwipeRow(activeSwipeRow);
+      activeSwipeRow = row;
+    } else {
+      closeSwipeRow(row);
+    }
 
-      const cleanup = () => {
+    delete row._swipeStartX;
+    row._swiping = false;
+  });
+
+  function ensureDeleteBehind(row) {
+    if (row.querySelector('.wl-swipe-delete')) return;
+    const btn = document.createElement('button');
+    btn.className = 'wl-swipe-delete';
+    btn.textContent = '🗑';
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sym = row.dataset.symbol;
+      row.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+      row.style.transform = 'translateX(-100%)';
+      row.style.opacity = '0';
+      setTimeout(() => {
+        row.remove();
+        onDelete({ type: 'symbol', symbol: sym });
+      }, 300);
+    });
+    row.style.position = 'relative';
+    row.appendChild(btn);
+  }
+
+  function closeSwipeRow(row) {
+    row.style.transition = 'transform 0.2s ease';
+    row.style.transform = '';
+    if (activeSwipeRow === row) activeSwipeRow = null;
+    setTimeout(() => {
+      const btn = row.querySelector('.wl-swipe-delete');
+      if (btn) btn.remove();
+    }, 200);
+  }
+
+  // Close any open swipe when tapping elsewhere
+  container.addEventListener('pointerdown', (e) => {
+    if (activeSwipeRow && !activeSwipeRow.contains(e.target)) {
+      closeSwipeRow(activeSwipeRow);
+    }
+  });
+
+  // --- Long press to reorder ---
+  container.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.wl-row');
+    if (!row) return;
+    if (e.target.closest('.wl-swipe-delete')) return;
+    if (activeSwipeRow) return;
+
+    startY = e.clientY;
+    pressTimer = setTimeout(() => {
+      startDrag(row, e);
+    }, LONG_PRESS_MS);
+
+    const onMoveCancel = (ev) => {
+      if (Math.abs(ev.clientY - startY) > 10) {
         clearTimeout(pressTimer);
         pressTimer = null;
         container.removeEventListener('pointermove', onMoveCancel);
-      };
-      container.addEventListener('pointerup', cleanup, { once: true });
-      container.addEventListener('pointercancel', cleanup, { once: true });
-    }
+      }
+    };
+    container.addEventListener('pointermove', onMoveCancel, { once: false });
+
+    const cleanup = () => {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+      container.removeEventListener('pointermove', onMoveCancel);
+    };
+    container.addEventListener('pointerup', cleanup, { once: true });
+    container.addEventListener('pointercancel', cleanup, { once: true });
   });
 
   function startDrag(row, e) {
@@ -126,62 +184,9 @@ export function setupWatchlistReorder(container, { onReorder, onDelete }) {
     }
 
     const newOrder = [...container.querySelectorAll('.wl-row')].map((r) => r.dataset.symbol);
-    if (onReorderCb) onReorderCb(newOrder);
+    onReorder(newOrder);
 
     dragRow = null;
     placeholder = null;
   }
-}
-
-function enterEditMode() {
-  if (editMode) return;
-  editMode = true;
-  containerEl.classList.add('edit-mode');
-
-  // Add delete buttons to all rows
-  containerEl.querySelectorAll('.wl-row').forEach((row) => {
-    addDeleteBtn(row, 'symbol');
-  });
-
-  // Add delete buttons to section headers
-  containerEl.querySelectorAll('.wl-section-header').forEach((header) => {
-    addDeleteBtn(header, 'section');
-  });
-
-  // Add Done button at top
-  const doneBar = document.createElement('div');
-  doneBar.className = 'wl-edit-done-bar';
-  doneBar.innerHTML = '<button class="wl-done-btn">Done</button>';
-  containerEl.insertBefore(doneBar, containerEl.firstChild);
-  doneBar.querySelector('.wl-done-btn').addEventListener('click', exitEditMode);
-}
-
-function addDeleteBtn(el, type) {
-  const btn = document.createElement('button');
-  btn.className = 'wl-delete-btn';
-  btn.textContent = '−';
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (type === 'symbol') {
-      const sym = el.dataset.symbol;
-      if (onDeleteCb) onDeleteCb({ type: 'symbol', symbol: sym });
-    } else {
-      const name = el.textContent.replace('−', '').trim();
-      if (onDeleteCb) onDeleteCb({ type: 'section', section: name });
-    }
-  });
-  el.appendChild(btn);
-}
-
-export function exitEditMode() {
-  if (!editMode) return;
-  editMode = false;
-  containerEl.classList.remove('edit-mode');
-
-  // Remove all delete buttons
-  containerEl.querySelectorAll('.wl-delete-btn').forEach((btn) => btn.remove());
-
-  // Remove done bar
-  const doneBar = containerEl.querySelector('.wl-edit-done-bar');
-  if (doneBar) doneBar.remove();
 }

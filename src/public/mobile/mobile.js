@@ -5,7 +5,7 @@ import { ViewportModel } from '/js/chart/ViewportModel.js';
 import { PriceChart } from '/js/chart/PriceChart.js';
 import { GEXSection } from '/js/chart/GEXSection.js';
 import { VolumeSection } from '/js/chart/VolumeSection.js';
-import { setupWatchlistReorder, exitEditMode } from '/mobile/touch.js';
+import { setupWatchlistTouch } from '/mobile/touch.js';
 
 const state = {
   currentSymbol: null,
@@ -535,7 +535,7 @@ async function init() {
 
   await loadWatchlist();
 
-  setupWatchlistReorder(document.getElementById('wl-sections'), {
+  setupWatchlistTouch(document.getElementById('wl-sections'), {
     onReorder: async (newOrder) => {
       const flat = watchlistData.flatMap((s) => s.symbols);
       if (flat.join(',') !== newOrder.join(',')) {
@@ -550,7 +550,7 @@ async function init() {
         });
       }
     },
-    onDelete: async ({ type, symbol, section }) => {
+    onDelete: async ({ type, symbol }) => {
       if (type === 'symbol') {
         for (const sec of watchlistData) {
           const idx = sec.symbols.indexOf(symbol);
@@ -559,15 +559,7 @@ async function init() {
             break;
           }
         }
-      } else if (type === 'section') {
-        watchlistData = watchlistData.filter((s) => s.name !== section);
-        await fetch('/api/watchlist', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(watchlistData),
-        });
       }
-      exitEditMode();
       await loadWatchlist();
     },
   });

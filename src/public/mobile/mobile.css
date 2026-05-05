@@ -143,6 +143,7 @@ html, body {
 #wl-sections {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -171,44 +172,26 @@ html, body {
   transform: scale(1.02);
 }
 
-/* Edit mode */
-.wl-edit-done-bar {
-  display: flex;
-  justify-content: flex-end;
-  padding: 8px 16px;
+/* Swipe to delete */
+.wl-row {
+  position: relative;
+  overflow: visible;
 }
 
-.wl-done-btn {
-  background: none;
-  border: none;
-  color: #0a84ff;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.wl-delete-btn {
+.wl-swipe-delete {
   position: absolute;
-  right: 12px;
+  right: -48px;
   top: 50%;
   transform: translateY(-50%);
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: #ff453a;
   border: none;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 22px;
+  font-size: 14px;
+  line-height: 28px;
   text-align: center;
   cursor: pointer;
-}
-
-.edit-mode .wl-row,
-.edit-mode .wl-section-header {
-  position: relative;
-  padding-right: 48px;
 }
 
 .wl-row-top {
