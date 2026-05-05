@@ -70,7 +70,6 @@ html, body {
   flex-direction: column;
   height: 100%;
   padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
 }
 
 #app.active {
@@ -92,6 +91,7 @@ html, body {
   display: flex;
   border-top: 1px solid var(--border);
   background: var(--bg-app);
+  padding-bottom: env(safe-area-inset-bottom);
   z-index: 50;
 }
 
