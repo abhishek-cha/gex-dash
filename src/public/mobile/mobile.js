@@ -10,8 +10,8 @@ import { setupWatchlistTouch } from '/mobile/touch.js';
 const state = {
   currentSymbol: null,
   activeStream: null,
-  activeFreq: '1D',
-  activeRange: '1M',
+  activeFreq: null,
+  activeRange: null,
   allExpirations: [],
   selectedExpirations: new Set(),
 
@@ -361,6 +361,9 @@ function setupToolbar() {
   const freqSel = document.getElementById('picker-freq');
   const rangeSel = document.getElementById('picker-range');
   const symSel = document.getElementById('picker-symbol');
+
+  state.activeFreq = freqSel.value;
+  state.activeRange = rangeSel.value;
 
   freqSel.addEventListener('change', () => {
     state.activeFreq = freqSel.value;
