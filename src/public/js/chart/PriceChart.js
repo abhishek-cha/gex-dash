@@ -216,8 +216,8 @@ export class PriceChart extends BaseSection {
 
   _buildSeparator() {
     const s = this.sectionBounds();
-    // Opaque background behind axis to occlude candles during pan
-    const bg = this.makePlane(s.axis.left, 0, s.axis.width, this.height, COLORS.bg);
+    const bgColor = this.scene.background ? this.scene.background.getHex() : COLORS.bg;
+    const bg = this.makePlane(s.axis.left, 0, s.axis.width, this.height, bgColor);
     bg.position.z = 0.5;
     this.groups.overlays.add(bg);
     this.groups.overlays.add(
@@ -264,6 +264,8 @@ export class PriceChart extends BaseSection {
     const labelEvery = Math.max(1, Math.floor(visCount / 10));
     const labelStart = Math.max(0, Math.floor(vp.viewStartIdx));
     const labelEnd = Math.min(vp.priceData.length, Math.ceil(vp.viewEndIdx));
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    let lastYear = null;
     for (let i = labelStart; i < labelEnd; i += labelEvery) {
       const c = vp.priceData[i];
       if (!c) continue;
@@ -272,8 +274,13 @@ export class PriceChart extends BaseSection {
       lbl.className = 'date-label';
       lbl.style.left = x + 'px';
       const d = c.date;
-      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-      lbl.textContent = `${months[d.getMonth()]} ${d.getDate()}`;
+      const yr = d.getFullYear();
+      if (lastYear !== null && yr !== lastYear) {
+        lbl.textContent = yr;
+      } else {
+        lbl.textContent = months[d.getMonth()];
+      }
+      lastYear = yr;
       frag.appendChild(lbl);
     }
 
