@@ -134,6 +134,10 @@ function setupBus() {
     state.allExpirations = expirationDates;
     populateExpSelect();
   });
+
+  bus.on('done:gex', () => {
+    populateExpSelect();
+  });
 }
 
 let watchlistData = [];
