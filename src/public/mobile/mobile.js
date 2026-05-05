@@ -108,7 +108,12 @@ function loadSymbol(symbol) {
   state.selectedExpirations = new Set();
 
   document.getElementById('chart-name').textContent = symbol;
-  document.getElementById('toolbar-symbol').textContent = symbol;
+  // Scroll symbol picker to active symbol
+  if (symbolPicker) {
+    const allSymbols = watchlistData.flatMap((s) => s.symbols);
+    const idx = allSymbols.indexOf(symbol);
+    if (idx >= 0) symbolPicker.scrollTo(idx);
+  }
   document.getElementById('chart-price').textContent = '--';
   document.getElementById('chart-change').textContent = '--';
   document.getElementById('chart-change').className = '';
@@ -167,6 +172,7 @@ async function loadWatchlist() {
     watchlistData = [];
   }
   renderWatchlist();
+  populateSymbolScroller();
   openWatchlistStreams();
 }
 
@@ -381,25 +387,113 @@ function showAddSectionForm() {
   });
 }
 
-function setupToolbar() {
-  const pills = document.querySelectorAll('.interval-pills button');
-  pills.forEach((pill) => {
-    pill.addEventListener('click', () => {
-      pills.forEach((p) => p.classList.remove('active'));
-      pill.classList.add('active');
-      state.activeFreq = pill.dataset.freq;
-      state.activeRange = pill.dataset.range;
-      if (state.currentSymbol) {
-        state.closeStream();
-        const priceParams = getPriceParams(state.activeFreq, state.activeRange);
-        state.activeStream = openStream(state.currentSymbol, {
-          types: ['price'],
-          viewport,
-          priceParams,
-        });
-      }
-    });
+function reloadPrice() {
+  if (!state.currentSymbol) return;
+  state.closeStream();
+  const priceParams = getPriceParams(state.activeFreq, state.activeRange);
+  state.activeStream = openStream(state.currentSymbol, {
+    types: ['price'],
+    viewport,
+    priceParams,
   });
+}
+
+const FREQ_OPTIONS = ['5m', '15m', '30m', '1D', '1W', '1M'];
+const RANGE_OPTIONS = ['5D', '1M', '3M', '6M', '1Y', '2Y', '5Y'];
+
+function createPickerWheel(container, items, activeValue, onChange) {
+  const ITEM_H = 18;
+  let activeIdx = items.indexOf(activeValue);
+  if (activeIdx < 0) activeIdx = 0;
+
+  const track = document.createElement('div');
+  track.className = 'picker-track';
+
+  for (const item of items) {
+    const el = document.createElement('div');
+    el.className = 'picker-item';
+    el.textContent = item;
+    if (item === activeValue) el.classList.add('active');
+    track.appendChild(el);
+  }
+
+  container.innerHTML = '';
+  container.appendChild(track);
+
+  function scrollTo(idx) {
+    idx = Math.max(0, Math.min(items.length - 1, idx));
+    activeIdx = idx;
+    const offset = -(idx * ITEM_H) + ITEM_H * 0.5;
+    track.style.transform = `translateY(${offset}px)`;
+    track.querySelectorAll('.picker-item').forEach((el, i) => {
+      el.classList.toggle('active', i === idx);
+    });
+  }
+
+  scrollTo(activeIdx);
+
+  let startY = 0;
+  let startIdx = 0;
+
+  container.addEventListener('touchstart', (e) => {
+    startY = e.touches[0].clientY;
+    startIdx = activeIdx;
+    track.style.transition = 'none';
+  }, { passive: true });
+
+  container.addEventListener('touchmove', (e) => {
+    const dy = startY - e.touches[0].clientY;
+    const idxOffset = Math.round(dy / ITEM_H);
+    const newIdx = Math.max(0, Math.min(items.length - 1, startIdx + idxOffset));
+    const offset = -(newIdx * ITEM_H) + ITEM_H * 0.5;
+    track.style.transform = `translateY(${offset}px)`;
+    track.querySelectorAll('.picker-item').forEach((el, i) => {
+      el.classList.toggle('active', i === newIdx);
+    });
+  }, { passive: true });
+
+  container.addEventListener('touchend', () => {
+    track.style.transition = 'transform 0.2s ease';
+    const dy = startY - (event.changedTouches?.[0]?.clientY ?? startY);
+    const idxOffset = Math.round(dy / ITEM_H);
+    const newIdx = Math.max(0, Math.min(items.length - 1, startIdx + idxOffset));
+    scrollTo(newIdx);
+    if (newIdx !== startIdx) onChange(items[newIdx]);
+  });
+
+  return { scrollTo, getIndex: () => activeIdx };
+}
+
+let symbolPicker = null;
+let freqPicker = null;
+let rangePicker = null;
+
+function setupToolbar() {
+  freqPicker = createPickerWheel(
+    document.getElementById('picker-freq'),
+    FREQ_OPTIONS,
+    state.activeFreq,
+    (val) => { state.activeFreq = val; reloadPrice(); }
+  );
+
+  rangePicker = createPickerWheel(
+    document.getElementById('picker-range'),
+    RANGE_OPTIONS,
+    state.activeRange,
+    (val) => { state.activeRange = val; reloadPrice(); }
+  );
+}
+
+function populateSymbolScroller() {
+  const allSymbols = watchlistData.flatMap((s) => s.symbols);
+  if (allSymbols.length === 0) return;
+
+  symbolPicker = createPickerWheel(
+    document.getElementById('picker-symbol'),
+    allSymbols,
+    state.currentSymbol || allSymbols[0],
+    (sym) => loadSymbol(sym)
+  );
 }
 
 async function init() {
