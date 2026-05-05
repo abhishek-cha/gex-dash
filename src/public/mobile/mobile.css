@@ -70,7 +70,7 @@ html, body {
   display: none;
   flex-direction: column;
   height: 100%;
-  padding-top: 0;
+  padding-top: env(safe-area-inset-top);
 }
 
 #app.active {
@@ -308,6 +308,13 @@ html, body {
   padding: 6px 12px;
   border-top: 1px solid var(--border);
   gap: 8px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+#chart-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
 #chart-toolbar select {
@@ -319,16 +326,17 @@ html, body {
   font-size: 13px;
   font-weight: 600;
   outline: none;
+  flex-shrink: 0;
 }
 
 #exp-group {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;
   background: var(--bg-panel);
   border-radius: 6px;
   padding: 3px 6px;
+  flex-shrink: 0;
 }
 
 #exp-group.hidden {
