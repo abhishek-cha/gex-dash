@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { COLORS } from './constants.js';
+import { COLORS, LAYOUT } from './constants.js';
 
 export class BaseSection {
-  constructor(container, viewport) {
+  constructor(container, viewport, layoutOverrides) {
     this.container = container;
     this.viewport = viewport;
+    this.layout = { ...LAYOUT, ...layoutOverrides };
     this.width = container.clientWidth;
     this.height = container.clientHeight;
 

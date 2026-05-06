@@ -75,18 +75,21 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 ### Desktop Frontend
 
 - Modular chart split into `PriceChart`, `GEXSection`, `VolumeSection` — each with own Three.js canvas/scene/camera, sharing `ViewportModel` via `EventBus`.
+- Chart sections accept optional `layoutOverrides` (third constructor arg) merged with `LAYOUT` defaults in `BaseSection`. Mobile passes `{ priceAxisWidth: 40, gexTicks: 1 }` for a thinner axis and fewer labels; desktop uses defaults.
 - `PriceChart` uses Pointer Events (not mouse) — enables touch on mobile while desktop works identically.
 - Hot/cold GEX double-buffering prevents partial renders during streaming.
+- GEX bars use **proportional width** — each side gets width proportional to its max (`maxCall / (maxCall + maxPut)` for call side). Center line shifts dynamically. Bars have a 2px minimum width.
 - On-demand rendering (no animation loop) — sections rebuild only on `viewport:change`.
 - Desktop watchlist: right sidebar with SSE quotes, HTML5 drag-to-reorder, context menu.
 
 ### Mobile Frontend (`/mobile/`)
 
 - Separate PWA entry point sharing chart modules (`PriceChart`, `GEXSection`, `VolumeSection`, `ViewportModel`, `EventBus`, `api.js`).
-- Two tabs: Watchlist (two-line rows: ticker+price / name+change%, 30s quote polling) and Chart (full-width candles, GEX/Volume panel via view selector).
+- Two tabs: Watchlist (two-line rows: ticker+price / name+change%, 30s quote polling) and Chart (two-line header: company name / price+change+total GEX badge, then full-width candles, GEX/Volume panel via view selector).
 - GEX/Volume panel: 70/30 split when active. Section created on demand via `setView()` after layout reflow. Canvas uses `position: absolute` + `width/height: 100% !important` to prevent flex sizing feedback loops.
 - Bottom toolbar: native `<select>` dropdowns for symbol, frequency, range, and view mode (Chart Only / Chart + GEX / Chart + Volume). Horizontally scrollable. Expiration multi-select with All/Clear buttons shown only in GEX/Volume modes.
-- Watchlist: swipe left to reveal delete button, long-press to drag-reorder. + button is a native `<select>` that opens a dark `<dialog>` for input.
+- Watchlist: swipe left to reveal delete button, long-press drag-to-reorder using transform-based animation (rAF-throttled, single DOM commit on drop — no layout thrash during drag).
+- Viewport height lock delayed 300ms on init to avoid stale `innerHeight` on iOS background restore.
 - `user-select: none` + `-webkit-touch-callout: none` globally to suppress native selection on long-press.
 
 ## Key Patterns
@@ -102,7 +105,7 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 
 **Adding a new API endpoint**: Add handler in `src/routes/stream.ts` (new `types` value) or create new route file. Use `getValidAccessToken()`. Register in `server.ts`.
 
-**Adding a new chart section**: Extend `BaseSection`, subscribe to `viewport:change`, add container in `LayoutManager.init()`.
+**Adding a new chart section**: Extend `BaseSection` (accepts optional `layoutOverrides` third arg), subscribe to `viewport:change`, add container in `LayoutManager.init()`.
 
 **Changing GEX formula**: Modify `calculateGEX()` in `src/gex.ts`.
 

@@ -26,6 +26,8 @@ const state = {
 let viewport = null;
 let priceChart = null;
 
+const mobileLayout = { priceAxisWidth: 40, gexTicks: 1 };
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
@@ -38,7 +40,7 @@ function initChart() {
   viewport = new ViewportModel();
 
   const priceWrap = document.getElementById('chart-price-wrap');
-  priceChart = new PriceChart(priceWrap, viewport);
+  priceChart = new PriceChart(priceWrap, viewport, mobileLayout);
   priceChart.scene.background = new THREE.Color(0x000000);
 }
 
@@ -69,9 +71,9 @@ function setView(mode) {
 
   const black = new THREE.Color(0x000000);
   if (mode === 'gex') {
-    activePanel = new GEXSection(gexWrap, viewport);
+    activePanel = new GEXSection(gexWrap, viewport, mobileLayout);
   } else {
-    activePanel = new VolumeSection(gexWrap, viewport);
+    activePanel = new VolumeSection(gexWrap, viewport, mobileLayout);
   }
   activePanel.scene.background = black;
   bus.emit('viewport:change');
@@ -91,6 +93,8 @@ function loadSymbol(symbol) {
   document.getElementById('chart-price').textContent = '--';
   document.getElementById('chart-change').textContent = '--';
   document.getElementById('chart-change').className = '';
+  document.getElementById('chart-total-gex-val').textContent = '--';
+  document.getElementById('chart-total-gex').className = 'total-gex';
 
   viewport.clearPrice();
   viewport.clearGEX();
@@ -104,6 +108,20 @@ function loadSymbol(symbol) {
   });
 
   switchTab('chart');
+}
+
+function updateTotalGex() {
+  const el = document.getElementById('chart-total-gex');
+  const valEl = document.getElementById('chart-total-gex-val');
+  if (!viewport || !viewport.gexLevels.length) {
+    valEl.textContent = '--';
+    el.className = 'total-gex';
+    return;
+  }
+  let total = 0;
+  for (const l of viewport.gexLevels) total += l.netGex;
+  valEl.textContent = viewport.fmtGex(total);
+  el.className = 'total-gex ' + (total >= 0 ? 'positive' : 'negative');
 }
 
 function setupBus() {
@@ -137,6 +155,7 @@ function setupBus() {
 
   bus.on('done:gex', () => {
     populateExpSelect();
+    updateTotalGex();
   });
 }
 
@@ -401,10 +420,13 @@ function reloadGexFiltered() {
 }
 
 async function init() {
-  // Lock viewport height to prevent keyboard resize
-  const h = window.innerHeight + 'px';
-  document.documentElement.style.height = h;
-  document.body.style.height = h;
+  // Lock viewport height after browser settles to prevent keyboard resize.
+  // Delayed to avoid stale innerHeight on iOS background restore.
+  setTimeout(() => {
+    const h = window.innerHeight + 'px';
+    document.documentElement.style.height = h;
+    document.body.style.height = h;
+  }, 300);
 
   const authed = await checkAuth();
   if (!authed) {
