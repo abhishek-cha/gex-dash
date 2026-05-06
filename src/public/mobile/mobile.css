@@ -163,7 +163,7 @@ html, body {
 .wl-row {
   padding: 11px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
+  background: var(--bg-app);
   cursor: pointer;
   transition: background 0.15s;
 }
