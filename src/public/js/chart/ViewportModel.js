@@ -19,7 +19,11 @@ export class ViewportModel {
     this.strikeIndex = new Map();
     this.sortedLevels = [];
     this.gexMax = 1;
+    this.gexMaxCall = 1;
+    this.gexMaxPut = 1;
     this.oiMax = 1;
+    this.oiMaxCall = 1;
+    this.oiMaxPut = 1;
     this.cumulativeMap = null;
     this.combinedCumulative = null;
     this.maxCumulativeAbs = 0;
@@ -127,7 +131,7 @@ export class ViewportModel {
     }
     this.sortedLevels = this.sortedStrikes.map(s => levelMap.get(s));
 
-    // GEX max
+    // GEX max (per-side for proportional layout)
     let maxCallGex = 1, maxPutGex = 1;
     let maxCallOI = 1, maxPutOI = 1;
     for (const l of this.gexLevels) {
@@ -139,7 +143,11 @@ export class ViewportModel {
       if ((l.putOI || 0) > maxPutOI) maxPutOI = l.putOI;
     }
     this.gexMax = Math.max(maxCallGex, maxPutGex);
+    this.gexMaxCall = maxCallGex;
+    this.gexMaxPut = maxPutGex;
     this.oiMax = Math.max(maxCallOI, maxPutOI);
+    this.oiMaxCall = maxCallOI;
+    this.oiMaxPut = maxPutOI;
 
     // Cumulative GEX
     this._computeCumulative();
@@ -200,7 +208,11 @@ export class ViewportModel {
     this.strikeIndex = new Map();
     this.sortedLevels = [];
     this.gexMax = 1;
+    this.gexMaxCall = 1;
+    this.gexMaxPut = 1;
     this.oiMax = 1;
+    this.oiMaxCall = 1;
+    this.oiMaxPut = 1;
     this.cumulativeMap = null;
     this.combinedCumulative = null;
     this.maxCumulativeAbs = 0;
