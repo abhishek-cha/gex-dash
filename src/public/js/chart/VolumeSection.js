@@ -69,9 +69,14 @@ export class VolumeSection extends BaseSection {
   }
 
   _computeMaxVol() {
+    const vp = this.viewport;
+    const pMin = vp.viewPriceMin;
+    const pMax = vp.viewPriceMax;
     let maxVol = 1;
-    for (const l of this.viewport.gexLevels) {
-      if (l.totalVolume > maxVol) maxVol = l.totalVolume;
+    for (const l of vp.gexLevels) {
+      if (l.strike >= pMin && l.strike <= pMax && l.totalVolume > maxVol) {
+        maxVol = l.totalVolume;
+      }
     }
     return maxVol;
   }

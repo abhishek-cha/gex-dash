@@ -17,6 +17,7 @@ export class GEXSection extends BaseSection {
     this._labelsOverlay = null;
     this._tooltip = null;
     this._displayMode = 'gex'; // 'gex' or 'oi'
+    this._cachedMax = { maxCall: 1, maxPut: 1 };
 
     this._initOverlays();
     this._initToggle();
@@ -86,8 +87,10 @@ export class GEXSection extends BaseSection {
     this._highlightedStrike = null;
     this._clearHighlightGroup();
     if (this._displayMode === 'oi') {
+      this._cachedMax = this._visibleOIMax();
       this._buildOIBars();
     } else {
+      this._cachedMax = this._visibleGexMax();
       this._buildGEXBars();
       this._buildCumulativeLine();
     }
@@ -98,12 +101,40 @@ export class GEXSection extends BaseSection {
 
   // --- Rendering (runs on every rebuild: pan, zoom, resize) ---
 
+  _visibleLevels() {
+    const vp = this.viewport;
+    const pMin = vp.viewPriceMin;
+    const pMax = vp.viewPriceMax;
+    return vp.sortedLevels.filter(l => l.strike >= pMin && l.strike <= pMax);
+  }
+
+  _visibleGexMax() {
+    let maxCall = 1, maxPut = 1;
+    for (const l of this._visibleLevels()) {
+      const ac = Math.abs(l.callGex);
+      const ap = Math.abs(l.putGex);
+      if (ac > maxCall) maxCall = ac;
+      if (ap > maxPut) maxPut = ap;
+    }
+    return { maxCall, maxPut };
+  }
+
+  _visibleOIMax() {
+    let maxCall = 1, maxPut = 1;
+    for (const l of this._visibleLevels()) {
+      const c = l.callOI || 0;
+      const p = l.putOI || 0;
+      if (c > maxCall) maxCall = c;
+      if (p > maxPut) maxPut = p;
+    }
+    return { maxCall, maxPut };
+  }
+
   _buildGEXBars() {
     const vp = this.viewport;
     if (!vp.gexLevels.length) return;
 
-    const maxCall = vp.gexMaxCall;
-    const maxPut = vp.gexMaxPut;
+    const { maxCall, maxPut } = this._cachedMax;
     const callFrac = maxCall / (maxCall + maxPut);
     const callW = this.width * callFrac;
     const putW = this.width - callW;
@@ -136,8 +167,7 @@ export class GEXSection extends BaseSection {
     const vp = this.viewport;
     if (!vp.gexLevels.length) return;
 
-    const maxCall = vp.oiMaxCall;
-    const maxPut = vp.oiMaxPut;
+    const { maxCall, maxPut } = this._cachedMax;
     const callFrac = maxCall / (maxCall + maxPut);
     const callW = this.width * callFrac;
     const putW = this.width - callW;
@@ -175,8 +205,7 @@ export class GEXSection extends BaseSection {
     const combined = vp.combinedCumulative;
     if (!combined || vp.maxCumulativeAbs === 0) return;
 
-    const maxCall = vp.gexMaxCall;
-    const maxPut = vp.gexMaxPut;
+    const { maxCall, maxPut } = this._cachedMax;
     const callFrac = maxCall / (maxCall + maxPut);
     const callW = this.width * callFrac;
     const putW = this.width - callW;
@@ -284,13 +313,13 @@ export class GEXSection extends BaseSection {
     const glowY = barY - glowPad / 2;
     const glowH = barH + glowPad;
 
+    const { maxCall, maxPut } = this._cachedMax;
+    const callFrac = maxCall / (maxCall + maxPut);
+    const callW = this.width * callFrac;
+    const putW = this.width - callW;
+    const centerX = putW;
+
     if (this._displayMode === 'oi') {
-      const maxCall = vp.oiMaxCall;
-      const maxPut = vp.oiMaxPut;
-      const callFrac = maxCall / (maxCall + maxPut);
-      const callW = this.width * callFrac;
-      const putW = this.width - callW;
-      const centerX = putW;
       const callOI = level.callOI || 0;
       const putOI = level.putOI || 0;
       if (callOI > 0) {
@@ -306,12 +335,6 @@ export class GEXSection extends BaseSection {
         );
       }
     } else {
-      const maxCall = vp.gexMaxCall;
-      const maxPut = vp.gexMaxPut;
-      const callFrac = maxCall / (maxCall + maxPut);
-      const callW = this.width * callFrac;
-      const putW = this.width - callW;
-      const centerX = putW;
       if (level.callGex > 0) {
         const w = (level.callGex / maxCall) * callW + glowPad;
         this._highlightGroup.add(
@@ -354,8 +377,7 @@ export class GEXSection extends BaseSection {
 
   _addGexScale(frag) {
     const vp = this.viewport;
-    const maxCall = vp.gexMaxCall;
-    const maxPut = vp.gexMaxPut;
+    const { maxCall, maxPut } = this._cachedMax;
     const callFrac = maxCall / (maxCall + maxPut);
     const callW = this.width * callFrac;
     const putW = this.width - callW;
@@ -399,8 +421,7 @@ export class GEXSection extends BaseSection {
 
   _addOIScale(frag) {
     const vp = this.viewport;
-    const maxCall = vp.oiMaxCall;
-    const maxPut = vp.oiMaxPut;
+    const { maxCall, maxPut } = this._cachedMax;
     const callFrac = maxCall / (maxCall + maxPut);
     const callW = this.width * callFrac;
     const putW = this.width - callW;
