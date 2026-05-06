@@ -247,28 +247,46 @@ html, body {
   padding: 8px 12px;
 }
 
-.chart-symbol-bar {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.chart-name-line {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-#chart-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-secondary);
+.chart-data-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 #chart-price {
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 #chart-change {
-  font-size: 12px;
+  font-size: 13px;
 }
 
 #chart-change.up { color: var(--green); }
 #chart-change.down { color: var(--red); }
+
+.total-gex {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+  background: #30363d;
+  color: #8b949e;
+}
+
+.total-gex.positive { background: #238636; color: #fff; }
+.total-gex.negative { background: #da3633; color: #fff; }
 
 #chart-area {
   flex: 1;

@@ -91,6 +91,8 @@ function loadSymbol(symbol) {
   document.getElementById('chart-price').textContent = '--';
   document.getElementById('chart-change').textContent = '--';
   document.getElementById('chart-change').className = '';
+  document.getElementById('chart-total-gex-val').textContent = '--';
+  document.getElementById('chart-total-gex').className = 'total-gex';
 
   viewport.clearPrice();
   viewport.clearGEX();
@@ -104,6 +106,20 @@ function loadSymbol(symbol) {
   });
 
   switchTab('chart');
+}
+
+function updateTotalGex() {
+  const el = document.getElementById('chart-total-gex');
+  const valEl = document.getElementById('chart-total-gex-val');
+  if (!viewport || !viewport.gexLevels.length) {
+    valEl.textContent = '--';
+    el.className = 'total-gex';
+    return;
+  }
+  let total = 0;
+  for (const l of viewport.gexLevels) total += l.netGex;
+  valEl.textContent = viewport.fmtGex(total);
+  el.className = 'total-gex ' + (total >= 0 ? 'positive' : 'negative');
 }
 
 function setupBus() {
@@ -137,6 +153,7 @@ function setupBus() {
 
   bus.on('done:gex', () => {
     populateExpSelect();
+    updateTotalGex();
   });
 }
 
