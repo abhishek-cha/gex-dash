@@ -4,8 +4,8 @@ import { BaseSection } from './BaseSection.js';
 import { bus } from './EventBus.js';
 
 export class VolumeSection extends BaseSection {
-  constructor(container, viewport) {
-    super(container, viewport);
+  constructor(container, viewport, layoutOverrides) {
+    super(container, viewport, layoutOverrides);
 
     this._addGroup('volumeBars');
     this._initHighlightGroup();

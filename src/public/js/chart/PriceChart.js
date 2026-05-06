@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { COLORS, LAYOUT } from './constants.js';
+import { COLORS } from './constants.js';
 import { BaseSection } from './BaseSection.js';
 import { bus } from './EventBus.js';
 
 export class PriceChart extends BaseSection {
-  constructor(container, viewport) {
-    super(container, viewport);
+  constructor(container, viewport, layoutOverrides) {
+    super(container, viewport, layoutOverrides);
 
     this._addGroup('grid');
     this._addGroup('candles');
@@ -41,14 +41,14 @@ export class PriceChart extends BaseSection {
     this.container.appendChild(this._crosshairPrice);
   }
 
-  get _axisWidth() { return LAYOUT.priceAxisWidth; }
+  get _axisWidth() { return this.layout.priceAxisWidth; }
 
   sectionBounds() {
     const w = this.width;
-    const candleW = w - this._axisWidth - LAYOUT.marginLeft;
+    const candleW = w - this._axisWidth - this.layout.marginLeft;
     return {
-      candle: { left: LAYOUT.marginLeft, right: LAYOUT.marginLeft + candleW, width: candleW },
-      axis: { left: LAYOUT.marginLeft + candleW, right: w, width: this._axisWidth },
+      candle: { left: this.layout.marginLeft, right: this.layout.marginLeft + candleW, width: candleW },
+      axis: { left: this.layout.marginLeft + candleW, right: w, width: this._axisWidth },
       top: this.height - this._marginTop(),
       bottom: this._marginBottom(),
       chartH: this._chartH(),
@@ -110,7 +110,7 @@ export class PriceChart extends BaseSection {
     for (let p = startP; p <= vp.viewPriceMax; p += step) {
       const y = this.priceToY(p);
       this.groups.grid.add(
-        this.makeLine([[LAYOUT.marginLeft, y], [this.width, y]], COLORS.grid, 0.5)
+        this.makeLine([[this.layout.marginLeft, y], [this.width, y]], COLORS.grid, 0.5)
       );
     }
   }
@@ -121,7 +121,7 @@ export class PriceChart extends BaseSection {
     const visibleCount = vp.viewEndIdx - vp.viewStartIdx;
     if (visibleCount <= 0) return;
 
-    const candleW = (s.candle.width / visibleCount) * (1 - LAYOUT.candleGap);
+    const candleW = (s.candle.width / visibleCount) * (1 - this.layout.candleGap);
     const wickW = Math.max(1, candleW * 0.1);
 
     const upBodies = [], downBodies = [], upWicks = [], downWicks = [];
@@ -158,7 +158,7 @@ export class PriceChart extends BaseSection {
     if (!vp.spotPrice) return;
     const y = this.priceToY(vp.spotPrice);
     const geo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(LAYOUT.marginLeft, y, 0),
+      new THREE.Vector3(this.layout.marginLeft, y, 0),
       new THREE.Vector3(this.width, y, 0),
     ]);
     const mat = new THREE.LineDashedMaterial({

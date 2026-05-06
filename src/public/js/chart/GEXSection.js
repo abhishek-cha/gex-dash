@@ -7,8 +7,8 @@ function hexCss(c) {
 }
 
 export class GEXSection extends BaseSection {
-  constructor(container, viewport) {
-    super(container, viewport);
+  constructor(container, viewport, layoutOverrides) {
+    super(container, viewport, layoutOverrides);
 
     this._addGroup('gexBars');
     this._addGroup('cumulativeLine');
@@ -330,7 +330,7 @@ export class GEXSection extends BaseSection {
     const maxGex = vp.gexMax;
     const halfW = this.width / 2;
     const centerX = halfW;
-    const ticks = 3;
+    const ticks = this.layout.gexTicks;
     const scaleStep = vp.niceStep(maxGex, ticks);
 
     const zeroLbl = document.createElement('div');
@@ -370,7 +370,7 @@ export class GEXSection extends BaseSection {
     const maxOI = vp.oiMax;
     const halfW = this.width / 2;
     const centerX = halfW;
-    const ticks = 3;
+    const ticks = this.layout.gexTicks;
     const scaleStep = vp.niceStep(maxOI, ticks);
 
     const zeroLbl = document.createElement('div');

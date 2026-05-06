@@ -26,6 +26,8 @@ const state = {
 let viewport = null;
 let priceChart = null;
 
+const mobileLayout = { priceAxisWidth: 40, gexTicks: 1 };
+
 function switchTab(tab) {
   document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
@@ -38,7 +40,7 @@ function initChart() {
   viewport = new ViewportModel();
 
   const priceWrap = document.getElementById('chart-price-wrap');
-  priceChart = new PriceChart(priceWrap, viewport);
+  priceChart = new PriceChart(priceWrap, viewport, mobileLayout);
   priceChart.scene.background = new THREE.Color(0x000000);
 }
 
@@ -69,9 +71,9 @@ function setView(mode) {
 
   const black = new THREE.Color(0x000000);
   if (mode === 'gex') {
-    activePanel = new GEXSection(gexWrap, viewport);
+    activePanel = new GEXSection(gexWrap, viewport, mobileLayout);
   } else {
-    activePanel = new VolumeSection(gexWrap, viewport);
+    activePanel = new VolumeSection(gexWrap, viewport, mobileLayout);
   }
   activePanel.scene.background = black;
   bus.emit('viewport:change');
