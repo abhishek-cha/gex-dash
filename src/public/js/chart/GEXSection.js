@@ -353,7 +353,7 @@ export class GEXSection extends BaseSection {
     const callW = this.width * callFrac;
     const putW = this.width - callW;
     const centerX = putW;
-    const ticks = this.layout.gexTicks;
+    const minPxPerTick = 60;
 
     const zeroLbl = document.createElement('div');
     zeroLbl.className = 'gex-scale-label';
@@ -361,10 +361,11 @@ export class GEXSection extends BaseSection {
     zeroLbl.textContent = '0';
     frag.appendChild(zeroLbl);
 
-    const callStep = vp.niceStep(maxCall, ticks);
+    const callTicks = Math.max(1, Math.floor(callW / minPxPerTick));
+    const callStep = vp.niceStep(maxCall, callTicks);
     for (let v = callStep; v <= maxCall * 1.05; v += callStep) {
       const rx = centerX + (v / maxCall) * callW;
-      if (rx < this.width - 5) {
+      if (rx < this.width - 30) {
         const rl = document.createElement('div');
         rl.className = 'gex-scale-label';
         rl.style.left = rx + 'px';
@@ -374,10 +375,11 @@ export class GEXSection extends BaseSection {
       }
     }
 
-    const putStep = vp.niceStep(maxPut, ticks);
+    const putTicks = Math.max(1, Math.floor(putW / minPxPerTick));
+    const putStep = vp.niceStep(maxPut, putTicks);
     for (let v = putStep; v <= maxPut * 1.05; v += putStep) {
       const lx = centerX - (v / maxPut) * putW;
-      if (lx > 5) {
+      if (lx > 30) {
         const ll = document.createElement('div');
         ll.className = 'gex-scale-label';
         ll.style.left = lx + 'px';
@@ -396,7 +398,7 @@ export class GEXSection extends BaseSection {
     const callW = this.width * callFrac;
     const putW = this.width - callW;
     const centerX = putW;
-    const ticks = this.layout.gexTicks;
+    const minPxPerTick = 60;
 
     const zeroLbl = document.createElement('div');
     zeroLbl.className = 'gex-scale-label';
@@ -404,10 +406,11 @@ export class GEXSection extends BaseSection {
     zeroLbl.textContent = '0';
     frag.appendChild(zeroLbl);
 
-    const callStep = vp.niceStep(maxCall, ticks);
+    const callTicks = Math.max(1, Math.floor(callW / minPxPerTick));
+    const callStep = vp.niceStep(maxCall, callTicks);
     for (let v = callStep; v <= maxCall * 1.05; v += callStep) {
       const rx = centerX + (v / maxCall) * callW;
-      if (rx < this.width - 5) {
+      if (rx < this.width - 30) {
         const rl = document.createElement('div');
         rl.className = 'gex-scale-label';
         rl.style.left = rx + 'px';
@@ -417,10 +420,11 @@ export class GEXSection extends BaseSection {
       }
     }
 
-    const putStep = vp.niceStep(maxPut, ticks);
+    const putTicks = Math.max(1, Math.floor(putW / minPxPerTick));
+    const putStep = vp.niceStep(maxPut, putTicks);
     for (let v = putStep; v <= maxPut * 1.05; v += putStep) {
       const lx = centerX - (v / maxPut) * putW;
-      if (lx > 5) {
+      if (lx > 30) {
         const ll = document.createElement('div');
         ll.className = 'gex-scale-label';
         ll.style.left = lx + 'px';

@@ -21,7 +21,6 @@ export const LAYOUT = {
   marginBottom: 30,
   marginLeft: 8,
   priceAxisWidth: 60,
-  gexTicks: 3,
   gexSectionRatio: 0.22,
   volumeSectionRatio: 0.13,
   candleGap: 0.3,
