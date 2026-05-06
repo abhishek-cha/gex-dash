@@ -58,8 +58,6 @@ export class VolumeSection extends BaseSection {
     this.container.appendChild(this._crosshairH);
   }
 
-  _marginTop() { return 0; }
-
   rebuild() {
     this._clearAllGroups();
     this._highlightedStrike = null;

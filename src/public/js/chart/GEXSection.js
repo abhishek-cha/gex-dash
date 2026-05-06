@@ -99,8 +99,6 @@ export class GEXSection extends BaseSection {
     this.render();
   }
 
-  _marginTop() { return 0; }
-
   // --- Rendering (runs on every rebuild: pan, zoom, resize) ---
 
   _visibleLevels() {

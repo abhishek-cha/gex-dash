@@ -17,7 +17,7 @@ export const COLORS = {
 };
 
 export const LAYOUT = {
-  marginTop: 30,
+  marginTop: 0,
   marginBottom: 30,
   marginLeft: 8,
   priceAxisWidth: 60,

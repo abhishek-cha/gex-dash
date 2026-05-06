@@ -151,7 +151,7 @@ export class BaseSection {
     return vp.viewPriceMin + t * (vp.viewPriceMax - vp.viewPriceMin);
   }
 
-  _marginTop() { return 30; }
+  _marginTop() { return 0; }
   _marginBottom() { return 30; }
 
   _chartH() {
