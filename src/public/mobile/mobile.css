@@ -161,6 +161,7 @@ html, body {
 .wl-row {
   padding: 11px 16px;
   border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -170,8 +171,9 @@ html, body {
 }
 
 .wl-row.dragging {
-  opacity: 0.6;
-  transform: scale(1.02);
+  opacity: 0.85;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  background: var(--bg-card);
 }
 
 /* Swipe to delete */

@@ -401,10 +401,13 @@ function reloadGexFiltered() {
 }
 
 async function init() {
-  // Lock viewport height to prevent keyboard resize
-  const h = window.innerHeight + 'px';
-  document.documentElement.style.height = h;
-  document.body.style.height = h;
+  // Lock viewport height after browser settles to prevent keyboard resize.
+  // Delayed to avoid stale innerHeight on iOS background restore.
+  setTimeout(() => {
+    const h = window.innerHeight + 'px';
+    document.documentElement.style.height = h;
+    document.body.style.height = h;
+  }, 300);
 
   const authed = await checkAuth();
   if (!authed) {

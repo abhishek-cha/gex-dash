@@ -14,7 +14,6 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
   let pressTimer = null;
   let startY = 0;
   let dragRow = null;
-  let placeholder = null;
   let activeSwipeRow = null;
 
   // --- Swipe to delete ---
@@ -99,15 +98,21 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     }, 200);
   }
 
-  // Close any open swipe when tapping elsewhere
   container.addEventListener('pointerdown', (e) => {
     if (activeSwipeRow && !activeSwipeRow.contains(e.target)) {
       closeSwipeRow(activeSwipeRow);
     }
   });
 
-  // --- Long press to reorder ---
+  // --- Long press to reorder (transform-based) ---
   let activePointerId = null;
+  let rowHeight = 0;
+  let siblings = [];
+  let dragStartY = 0;
+  let currentOffset = 0;
+  let currentIndex = 0;
+  let originalIndex = 0;
+  let rafId = null;
 
   container.addEventListener('pointerdown', (e) => {
     const row = e.target.closest('.wl-row');
@@ -118,7 +123,7 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     startY = e.clientY;
     activePointerId = e.pointerId;
     pressTimer = setTimeout(() => {
-      startDrag(row);
+      startDrag(row, e.clientY);
     }, LONG_PRESS_MS);
 
     const onMoveCancel = (ev) => {
@@ -140,28 +145,30 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
     container.addEventListener('pointercancel', cleanup, { once: true });
   });
 
-  function startDrag(row) {
+  function startDrag(row, clientY) {
     dragRow = row;
+    siblings = [...container.querySelectorAll('.wl-row')].filter(r => r !== dragRow);
+    rowHeight = dragRow.offsetHeight;
+    originalIndex = [...container.querySelectorAll('.wl-row')].indexOf(dragRow);
+    currentIndex = originalIndex;
+    dragStartY = clientY;
+    currentOffset = 0;
+
     dragRow.classList.add('dragging');
+    dragRow.style.position = 'relative';
+    dragRow.style.zIndex = '200';
+    dragRow.style.transition = 'none';
+
+    for (const sib of siblings) {
+      sib.style.transition = 'transform 0.15s ease';
+    }
+
     container.style.overflow = 'hidden';
     container.style.touchAction = 'none';
+
     if (activePointerId != null) {
       try { dragRow.setPointerCapture(activePointerId); } catch {}
     }
-
-    placeholder = document.createElement('div');
-    placeholder.style.height = row.offsetHeight + 'px';
-    placeholder.style.background = 'var(--bg-card)';
-    placeholder.style.borderRadius = '4px';
-    placeholder.style.margin = '2px 0';
-    row.parentNode.insertBefore(placeholder, row);
-
-    dragRow.style.position = 'fixed';
-    dragRow.style.width = container.clientWidth + 'px';
-    dragRow.style.left = '0';
-    dragRow.style.top = startY - row.offsetHeight / 2 + 'px';
-    dragRow.style.zIndex = '200';
-    dragRow.style.pointerEvents = 'none';
 
     dragRow.addEventListener('pointermove', onDragMove);
     dragRow.addEventListener('pointerup', onDragEnd);
@@ -170,47 +177,97 @@ export function setupWatchlistTouch(container, { onReorder, onDelete }) {
 
   function onDragMove(e) {
     if (!dragRow) return;
-    dragRow.style.top = e.clientY - dragRow.offsetHeight / 2 + 'px';
+    currentOffset = e.clientY - dragStartY;
 
-    const target = document.elementFromPoint(e.clientX, e.clientY);
-    const targetRow = target?.closest('.wl-row');
-    if (targetRow && targetRow !== dragRow && targetRow !== placeholder) {
-      const rect = targetRow.getBoundingClientRect();
-      const mid = rect.top + rect.height / 2;
-      if (e.clientY < mid) {
-        targetRow.parentNode.insertBefore(placeholder, targetRow);
-      } else {
-        targetRow.parentNode.insertBefore(placeholder, targetRow.nextSibling);
+    if (rafId == null) {
+      rafId = requestAnimationFrame(applyDragFrame);
+    }
+  }
+
+  function applyDragFrame() {
+    rafId = null;
+    if (!dragRow) return;
+
+    dragRow.style.transform = `translateY(${currentOffset}px) scale(1.02)`;
+
+    const targetIndex = Math.round(currentOffset / rowHeight) + originalIndex;
+    const clampedIndex = Math.max(0, Math.min(siblings.length, targetIndex));
+
+    if (clampedIndex !== currentIndex) {
+      currentIndex = clampedIndex;
+      updateSiblingOffsets();
+    }
+  }
+
+  function updateSiblingOffsets() {
+    const allRows = [...container.querySelectorAll('.wl-row')];
+    for (const sib of siblings) {
+      const sibIdx = allRows.indexOf(sib);
+      let shift = 0;
+      if (originalIndex < currentIndex) {
+        if (sibIdx > originalIndex && sibIdx <= currentIndex) {
+          shift = -rowHeight;
+        }
+      } else if (originalIndex > currentIndex) {
+        if (sibIdx >= currentIndex && sibIdx < originalIndex) {
+          shift = rowHeight;
+        }
       }
+      sib.style.transform = shift ? `translateY(${shift}px)` : '';
     }
   }
 
   function onDragEnd() {
     if (!dragRow) return;
-    dragRow.classList.remove('dragging');
-    dragRow.style.position = '';
-    dragRow.style.width = '';
-    dragRow.style.left = '';
-    dragRow.style.top = '';
-    dragRow.style.zIndex = '';
-    dragRow.style.pointerEvents = '';
-    container.style.overflow = '';
-    container.style.touchAction = '';
 
     dragRow.removeEventListener('pointermove', onDragMove);
     dragRow.removeEventListener('pointerup', onDragEnd);
     dragRow.removeEventListener('pointercancel', onDragEnd);
 
-    if (placeholder && placeholder.parentNode) {
-      placeholder.parentNode.insertBefore(dragRow, placeholder);
-      placeholder.remove();
+    if (rafId != null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
     }
 
-    const newOrder = [...container.querySelectorAll('.wl-row')].map((r) => r.dataset.symbol);
-    onReorder(newOrder);
+    // Animate dragged row to final position
+    const finalOffset = (currentIndex - originalIndex) * rowHeight;
+    dragRow.style.transition = 'transform 0.15s ease';
+    dragRow.style.transform = `translateY(${finalOffset}px)`;
 
-    dragRow = null;
-    placeholder = null;
-    _suppressClick = true;
+    // After animation, commit DOM order
+    setTimeout(() => {
+      // Clear all transforms
+      dragRow.style.transition = '';
+      dragRow.style.transform = '';
+      dragRow.style.position = '';
+      dragRow.style.zIndex = '';
+      dragRow.classList.remove('dragging');
+
+      for (const sib of siblings) {
+        sib.style.transition = '';
+        sib.style.transform = '';
+      }
+
+      // Single DOM reorder commit
+      if (currentIndex !== originalIndex) {
+        const allRows = [...container.querySelectorAll('.wl-row')];
+        const ref = allRows[currentIndex];
+        if (ref) {
+          if (currentIndex > originalIndex) {
+            ref.after(dragRow);
+          } else {
+            ref.before(dragRow);
+          }
+        }
+
+        onReorder();
+      }
+
+      container.style.overflow = '';
+      container.style.touchAction = '';
+      dragRow = null;
+      siblings = [];
+      _suppressClick = true;
+    }, 160);
   }
 }
