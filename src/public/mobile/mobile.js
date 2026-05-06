@@ -26,7 +26,7 @@ const state = {
 let viewport = null;
 let priceChart = null;
 
-const mobileLayout = { priceAxisWidth: 40 };
+const mobileLayout = { priceAxisWidth: 40, gridColor: 0x222830 };
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));

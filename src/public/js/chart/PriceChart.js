@@ -102,16 +102,50 @@ export class PriceChart extends BaseSection {
 
   _buildGrid() {
     const vp = this.viewport;
-    const range = vp.viewPriceMax - vp.viewPriceMin;
-    if (range <= 0) return;
-    const step = vp.niceStep(range, 10);
-    const startP = Math.ceil(vp.viewPriceMin / step) * step;
+    const s = this.sectionBounds();
+    const gridColor = this.layout.gridColor || COLORS.grid;
 
-    for (let p = startP; p <= vp.viewPriceMax; p += step) {
-      const y = this.priceToY(p);
-      this.groups.grid.add(
-        this.makeLine([[this.layout.marginLeft, y], [this.width, y]], COLORS.grid, 0.5)
-      );
+    // Horizontal grid lines at price levels
+    const range = vp.viewPriceMax - vp.viewPriceMin;
+    if (range > 0) {
+      const step = vp.niceStep(range, 10);
+      const startP = Math.ceil(vp.viewPriceMin / step) * step;
+      for (let p = startP; p <= vp.viewPriceMax; p += step) {
+        const y = this.priceToY(p);
+        this.groups.grid.add(
+          this.makeLine([[this.layout.marginLeft, y], [this.width, y]], gridColor, 0.5)
+        );
+      }
+    }
+
+    // Vertical grid lines at time boundaries
+    const visStart = Math.max(0, Math.floor(vp.viewStartIdx));
+    const visEnd = Math.min(vp.priceData.length, Math.ceil(vp.viewEndIdx));
+    const firstDate = vp.priceData[visStart]?.date;
+    const lastDate = vp.priceData[Math.min(visEnd, vp.priceData.length - 1)]?.date;
+    const spanDays = firstDate && lastDate ? (lastDate - firstDate) / 86400000 : 999;
+    const useWeeks = spanDays < 90;
+
+    for (let i = visStart; i < visEnd; i++) {
+      const c = vp.priceData[i];
+      if (!c) continue;
+      const prev = i > 0 ? vp.priceData[i - 1]?.date : null;
+      let boundary = false;
+      if (useWeeks) {
+        const weekKey = `${c.date.getMonth()}/${Math.floor(c.date.getDate() / 7)}`;
+        const prevKey = prev ? `${prev.getMonth()}/${Math.floor(prev.getDate() / 7)}` : null;
+        boundary = !prev || weekKey !== prevKey;
+      } else {
+        boundary = !prev || c.date.getMonth() !== prev.getMonth();
+      }
+      if (boundary) {
+        const x = this.idxToX(i + 0.5);
+        if (x > s.candle.left && x < s.candle.right) {
+          this.groups.grid.add(
+            this.makeLine([[x, s.bottom], [x, s.top]], gridColor, 0.3)
+          );
+        }
+      }
     }
   }
 
@@ -260,28 +294,70 @@ export class PriceChart extends BaseSection {
       frag.appendChild(tag);
     }
 
+    const visStart = Math.max(0, Math.floor(vp.viewStartIdx));
+    const visEnd = Math.min(vp.priceData.length, Math.ceil(vp.viewEndIdx));
     const visCount = vp.viewEndIdx - vp.viewStartIdx;
-    const labelEvery = Math.max(1, Math.floor(visCount / 10));
-    const labelStart = Math.max(0, Math.floor(vp.viewStartIdx));
-    const labelEnd = Math.min(vp.priceData.length, Math.ceil(vp.viewEndIdx));
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    let lastYear = null;
-    for (let i = labelStart; i < labelEnd; i += labelEvery) {
+
+    const minLabelSpacingPx = 70;
+    const maxLabels = Math.floor(s.candle.width / minLabelSpacingPx);
+
+    // Determine granularity based on visible time span
+    const firstDate = vp.priceData[visStart]?.date;
+    const lastDate = vp.priceData[Math.min(visEnd, vp.priceData.length - 1)]?.date;
+    const spanDays = firstDate && lastDate ? (lastDate - firstDate) / 86400000 : 999;
+
+    // Pick boundary type: year, month, or week
+    const useWeeks = spanDays < 90;
+    const useMonths = !useWeeks;
+
+    let lastLabelText = null;
+    let labelsPlaced = 0;
+    for (let i = visStart; i < visEnd; i++) {
       const c = vp.priceData[i];
       if (!c) continue;
-      const x = this.idxToX(i + 0.5);
-      const lbl = document.createElement('div');
-      lbl.className = 'date-label';
-      lbl.style.left = x + 'px';
       const d = c.date;
-      const yr = d.getFullYear();
-      if (lastYear !== null && yr !== lastYear) {
-        lbl.textContent = yr;
+      let boundary = false;
+      let text = '';
+
+      if (useMonths) {
+        const prev = i > 0 ? vp.priceData[i - 1]?.date : null;
+        if (!prev || d.getMonth() !== prev.getMonth()) {
+          boundary = true;
+          if (!prev || d.getFullYear() !== prev.getFullYear()) {
+            text = d.getFullYear().toString();
+          } else {
+            text = months[d.getMonth()];
+          }
+        }
       } else {
-        lbl.textContent = months[d.getMonth()];
+        // Week boundaries: Monday (or first candle of a new week)
+        const prev = i > 0 ? vp.priceData[i - 1]?.date : null;
+        const weekKey = `${d.getMonth()}/${Math.floor(d.getDate() / 7)}`;
+        const prevWeekKey = prev ? `${prev.getMonth()}/${Math.floor(prev.getDate() / 7)}` : null;
+        if (!prev || weekKey !== prevWeekKey) {
+          boundary = true;
+          if (!prev || d.getMonth() !== prev.getMonth()) {
+            text = months[d.getMonth()] + ' ' + d.getDate();
+          } else {
+            text = (d.getMonth() + 1) + '/' + d.getDate();
+          }
+        }
       }
-      lastYear = yr;
-      frag.appendChild(lbl);
+
+      if (boundary && text !== lastLabelText) {
+        if (labelsPlaced >= maxLabels) break;
+        const x = this.idxToX(i + 0.5);
+        if (x >= s.candle.left && x <= s.candle.right - 30) {
+          const lbl = document.createElement('div');
+          lbl.className = 'date-label';
+          lbl.style.left = x + 'px';
+          lbl.textContent = text;
+          frag.appendChild(lbl);
+          lastLabelText = text;
+          labelsPlaced++;
+        }
+      }
     }
 
     overlay.innerHTML = '';
