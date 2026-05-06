@@ -24,6 +24,8 @@ export class VolumeSection extends BaseSection {
   }
 
   _initHeader() {
+    if (this.layout.hideToggle) return;
+
     const hdr = document.createElement('div');
     hdr.className = 'gex-mode-toggle';
     const lbl = document.createElement('button');

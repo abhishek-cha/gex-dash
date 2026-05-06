@@ -45,6 +45,8 @@ export class GEXSection extends BaseSection {
   }
 
   _initToggle() {
+    if (this.layout.hideToggle) return;
+
     const toggle = document.createElement('div');
     toggle.className = 'gex-mode-toggle';
 
@@ -72,6 +74,11 @@ export class GEXSection extends BaseSection {
     toggle.appendChild(gexBtn);
     toggle.appendChild(oiBtn);
     this.container.appendChild(toggle);
+  }
+
+  setDisplayMode(mode) {
+    this._displayMode = mode;
+    this.rebuild();
   }
 
   rebuild() {

@@ -26,7 +26,7 @@ const state = {
 let viewport = null;
 let priceChart = null;
 
-const mobileLayout = { priceAxisWidth: 40 };
+const mobileLayout = { priceAxisWidth: 40, hideToggle: true };
 
 function switchTab(tab) {
   document.querySelectorAll('.tab-view').forEach((v) => v.classList.remove('active'));
@@ -70,8 +70,9 @@ function setView(mode) {
   expGroup.classList.remove('hidden');
 
   const black = new THREE.Color(0x000000);
-  if (mode === 'gex') {
+  if (mode === 'gex' || mode === 'oi') {
     activePanel = new GEXSection(gexWrap, viewport, mobileLayout);
+    if (mode === 'oi') activePanel._displayMode = 'oi';
   } else {
     activePanel = new VolumeSection(gexWrap, viewport, mobileLayout);
   }
