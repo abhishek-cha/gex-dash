@@ -99,6 +99,8 @@ export class GEXSection extends BaseSection {
     this.render();
   }
 
+  _marginTop() { return 0; }
+
   // --- Rendering (runs on every rebuild: pan, zoom, resize) ---
 
   _visibleLevels() {
@@ -375,6 +377,34 @@ export class GEXSection extends BaseSection {
     overlay.appendChild(frag);
   }
 
+  _addScaleEdgeLabels(frag, maxCall, maxPut, fmt) {
+    const vp = this.viewport;
+    const callFrac = maxCall / (maxCall + maxPut);
+    const callW = this.width * callFrac;
+    const putW = this.width - callW;
+    const centerX = putW;
+
+    const zeroLbl = document.createElement('div');
+    zeroLbl.className = 'gex-scale-label';
+    zeroLbl.style.left = centerX + 'px';
+    zeroLbl.textContent = '0';
+    frag.appendChild(zeroLbl);
+
+    const callLbl = document.createElement('div');
+    callLbl.className = 'gex-scale-label';
+    callLbl.style.left = (this.width - 4) + 'px';
+    callLbl.style.color = hexCss(COLORS.callGex);
+    callLbl.textContent = fmt.call(vp, maxCall);
+    frag.appendChild(callLbl);
+
+    const putLbl = document.createElement('div');
+    putLbl.className = 'gex-scale-label';
+    putLbl.style.left = '4px';
+    putLbl.style.color = hexCss(COLORS.putGex);
+    putLbl.textContent = fmt.call(vp, maxPut);
+    frag.appendChild(putLbl);
+  }
+
   _addGexScale(frag) {
     const vp = this.viewport;
     const { maxCall, maxPut } = this._cachedMax;
@@ -383,6 +413,11 @@ export class GEXSection extends BaseSection {
     const putW = this.width - callW;
     const centerX = putW;
     const minPxPerTick = 60;
+
+    if (callW < minPxPerTick * 2 || putW < minPxPerTick * 2) {
+      this._addScaleEdgeLabels(frag, maxCall, maxPut, vp.fmtGex);
+      return;
+    }
 
     const zeroLbl = document.createElement('div');
     zeroLbl.className = 'gex-scale-label';
@@ -427,6 +462,11 @@ export class GEXSection extends BaseSection {
     const putW = this.width - callW;
     const centerX = putW;
     const minPxPerTick = 60;
+
+    if (callW < minPxPerTick * 2 || putW < minPxPerTick * 2) {
+      this._addScaleEdgeLabels(frag, maxCall, maxPut, vp.fmtVol);
+      return;
+    }
 
     const zeroLbl = document.createElement('div');
     zeroLbl.className = 'gex-scale-label';

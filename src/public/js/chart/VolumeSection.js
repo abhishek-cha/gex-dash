@@ -58,6 +58,8 @@ export class VolumeSection extends BaseSection {
     this.container.appendChild(this._crosshairH);
   }
 
+  _marginTop() { return 0; }
+
   rebuild() {
     this._clearAllGroups();
     this._highlightedStrike = null;
@@ -185,9 +187,8 @@ export class VolumeSection extends BaseSection {
   _addVolumeScale(frag) {
     const vp = this.viewport;
     const maxVol = this._computeMaxVol();
-    const ticks = 2;
-    const scaleStep = vp.niceStep(maxVol, ticks);
     const usableW = this.width * 0.9;
+    const minPxPerTick = 60;
 
     const zLbl = document.createElement('div');
     zLbl.className = 'gex-scale-label';
@@ -196,6 +197,17 @@ export class VolumeSection extends BaseSection {
     zLbl.textContent = '0';
     frag.appendChild(zLbl);
 
+    if (usableW < minPxPerTick * 2) {
+      const maxLbl = document.createElement('div');
+      maxLbl.className = 'gex-scale-label';
+      maxLbl.style.left = (2 + usableW) + 'px';
+      maxLbl.textContent = vp.fmtVol(maxVol);
+      frag.appendChild(maxLbl);
+      return;
+    }
+
+    const ticks = 2;
+    const scaleStep = vp.niceStep(maxVol, ticks);
     for (let v = scaleStep; v <= maxVol * 1.05; v += scaleStep) {
       const frac = v / maxVol;
       if (frac > 1.05) break;
