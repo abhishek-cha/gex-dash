@@ -113,7 +113,7 @@ export class PriceChart extends BaseSection {
       for (let p = startP; p <= vp.viewPriceMax; p += step) {
         const y = this.priceToY(p);
         this.groups.grid.add(
-          this.makeLine([[this.layout.marginLeft, y], [this.width, y]], gridColor, 1)
+          this.makeLine([[this.layout.marginLeft, y], [this.width, y]], gridColor, 0.7)
         );
       }
     }
@@ -141,7 +141,7 @@ export class PriceChart extends BaseSection {
         const x = this.idxToX(idx + 0.5);
         if (x > s.candle.left && x < s.candle.right) {
           this.groups.grid.add(
-            this.makeLine([[x, s.bottom], [x, s.top]], gridColor, 1)
+            this.makeLine([[x, s.bottom], [x, s.top]], gridColor, 0.7)
           );
         }
       }
