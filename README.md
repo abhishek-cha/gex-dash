@@ -15,7 +15,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 - **Expiration filter** — Multi-select dialog to choose which expirations feed the GEX calculation (default 60 days, up to 2 years)
 - **Watchlist sidebar** — Persistent, resizable sidebar with live quotes, drag-to-reorder, named sections, and context menu actions
 - **Resizable sections** — Drag handles between Price, GEX, and Volume sections to resize them horizontally
-- **Interactive chart** — Pan, zoom, crosshair tooltips, and axis-anchored scaling (see interactions below)
+- **Interactive chart** — Pan, zoom, crosshair tooltips, and axis-anchored scaling (see interactions below). Time axis labels and vertical grid lines anchor to fixed intervals (monthly/weekly/daily) and stay stable during pan/zoom
 - **Mobile PWA** — Bookmarkable mobile-friendly view at `/mobile` with TradingView-inspired dark theme, bottom tab navigation, touch gestures (pinch zoom, long-press crosshair), and collapsible GEX panel
 
 ## Prerequisites

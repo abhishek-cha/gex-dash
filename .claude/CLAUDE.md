@@ -75,7 +75,7 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 ### Desktop Frontend
 
 - Modular chart split into `PriceChart`, `GEXSection`, `VolumeSection` — each with own Three.js canvas/scene/camera, sharing `ViewportModel` via `EventBus`.
-- Chart sections accept optional `layoutOverrides` (third constructor arg) merged with `LAYOUT` defaults in `BaseSection`. Mobile passes `{ priceAxisWidth: 40, gexTicks: 1 }` for a thinner axis and fewer labels; desktop uses defaults.
+- Chart sections accept optional `layoutOverrides` (third constructor arg) merged with `LAYOUT` defaults in `BaseSection`. Mobile passes `{ priceAxisWidth: 40, gridColor: 0x222830 }` for a thinner axis and brighter grid on black background; desktop uses defaults.
 - `PriceChart` uses Pointer Events (not mouse) — enables touch on mobile while desktop works identically.
 - Hot/cold GEX double-buffering prevents partial renders during streaming.
 - GEX bars use **proportional width** — each side gets width proportional to its max (`maxCall / (maxCall + maxPut)` for call side). Center line shifts dynamically. Bars have a 2px minimum width.
@@ -97,6 +97,8 @@ The frontend uses native ES modules (no build step). Three.js loaded via CDN imp
 - **GEX is additive** — chunks stream independently, accumulate in cold buffer, promote to hot on `commitGEX()`.
 - **All date logic uses `estToday()`** (US Eastern) to match options market conventions.
 - **Pointer Events gesture state machine** in PriceChart: 1 pointer + move = pan, 2 pointers = pinch zoom, long-press 500ms = crosshair, double-tap 300ms = reset, wheel = desktop zoom.
+- **Time axis** uses fixed-interval ticks derived from viewport span (not visible candle count). `msPerCandle` computed from full dataset; `spanDays` from viewport index range. Labels/grid adapt: quarterly (>1yr), monthly (>60d), weekly (>14d), daily. Stable across pan/zoom/edge cases.
+- **GEX scale labels** derive tick count per side from available pixel width (`60px` min spacing), adapting to proportional layout automatically.
 - **Refresh token keep-alive**: forced refresh on startup (5s) + every 6 days prevents 7-day expiry during idle.
 - **CSS.escape** in all `querySelector` calls with dynamic symbol/section names.
 - **No frontend build step**: native ES modules, Three.js via CDN import map.
