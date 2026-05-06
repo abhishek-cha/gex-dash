@@ -6,7 +6,7 @@ Real-time Gamma Exposure (GEX) visualization for equities and index options, pow
 
 ## Features
 
-- **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates. Toggle to **OI mode** to view call/put open interest per strike instead
+- **Live GEX chart** — Call/put GEX bars and net GEX per strike, aggregated across expiration dates. Bar widths are proportional to each side's max (the divider shifts dynamically rather than fixed at center). Toggle to **OI mode** to view call/put open interest per strike instead
 - **Cumulative net GEX line** — Amber line showing cumulative net GEX radiating outward from spot price (upward to highest strike, downward to lowest strike)
 - **Total GEX** — Sum of all net GEX displayed in the header bar with green (positive) or red (negative) badge
 - **Dealer levels** — Red (resistance) and green (support) dotted lines drawn on the candlestick chart at key GEX strikes
@@ -62,7 +62,7 @@ npm start        # run compiled output
 Access the mobile view at `https://<HOST>:<PORT>/mobile/`. Add to home screen for a full-screen PWA experience.
 
 - **Watchlist tab** — Two-line rows (ticker + price / company name + change%). Swipe left to delete, long-press to drag-reorder. Tap a row to load its chart.
-- **Chart tab** — Full-width candlestick chart. Select "Chart + GEX" or "Chart + Volume" in the toolbar to show a 70/30 split panel. Touch gestures: one-finger pan, pinch to zoom, long-press for crosshair, double-tap to reset.
+- **Chart tab** — Two-line header (company name / price, change%, total GEX badge). Full-width candlestick chart. Select "Chart + GEX" or "Chart + Volume" in the toolbar to show a 70/30 split panel. Touch gestures: one-finger pan, pinch to zoom, long-press for crosshair, double-tap to reset.
 - **Bottom toolbar** — Native select dropdowns for symbol, candle interval (5m–1M), date range (5D–5Y), and view mode. Expiration multi-select with All/Clear shown in GEX/Volume modes.
 - **Add** — Tap + to add symbols or create new sections via native dialog.
 
