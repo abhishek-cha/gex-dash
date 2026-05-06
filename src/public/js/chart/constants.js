@@ -1,7 +1,7 @@
 export const COLORS = {
   bg:           0x0d1117,
-  grid:         0x1b2028,
-  gridStrong:   0x21262d,
+  grid:         0x2a2e39,
+  gridStrong:   0x363a45,
   candleUp:     0x26a69a,
   candleDown:   0xef5350,
   priceLine:    0x1f6feb,
